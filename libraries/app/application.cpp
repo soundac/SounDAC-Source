@@ -253,8 +253,11 @@ namespace detail {
             if( _options->count("genesis-json") )
             {
                fc::path genesis_path(_options->at("genesis-json").as<boost::filesystem::path>());
-               auto genesis = fc::json::from_file( genesis_path ).as<genesis_state_type>( 20 );
+               std::string genesis_json;
+               read_file_contents( genesis_path, genesis_json );
+               auto genesis = fc::json::from_string( genesis_json ).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( genesis_json );
                return genesis;
 
             } else {
@@ -262,6 +265,7 @@ namespace detail {
                muse::egenesis::compute_egenesis_json(egenesis_json);
                auto genesis = fc::json::from_string(egenesis_json).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( egenesis_json );
                return genesis;
             }
          };
@@ -766,6 +770,11 @@ namespace detail {
       virtual item_hash_t get_head_block_id() const override
       {
          return _chain_db->head_block_id();
+      }
+
+      virtual const fc::sha256& get_genesis_hash()const override
+      {
+         return _chain_db->get_genesis_json_hash();
       }
 
       virtual uint32_t estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const override

@@ -111,6 +111,9 @@ void database::open( const fc::path& data_dir, const genesis_state_type& initial
          version_file.close();
       }
 
+      genesis_json_hash = initial_allocation.json_hash;
+      ilog( "genesis.json hash is " + fc::string( genesis_json_hash ) );
+
       object_database::open(data_dir);
 
       _block_id_to_block.open(data_dir / "database" / "block_num_to_block");
@@ -378,6 +381,11 @@ std::vector<block_id_type> database::get_block_ids_on_fork(block_id_type head_of
 chain_id_type database::get_chain_id() const
 {
    return MUSE_CHAIN_ID;
+}
+
+const fc::sha256& database::get_genesis_json_hash()const
+{
+   return genesis_json_hash;
 }
 
 const account_object& database::get_account( const string& name )const
