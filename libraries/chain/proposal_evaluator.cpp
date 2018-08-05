@@ -44,6 +44,47 @@ namespace impl {
          template<typename T>
          void operator()( const T& v )const { /* do nothing by default */ }
 
+         void operator()( const muse::chain::witness_update_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to validate after HF
+               FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );
+         }
+
+         void operator()( const muse::chain::account_create_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json_metadata.size() > 0 ) // TODO: move to validate after HF
+               FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
+         }
+
+         void operator()( const muse::chain::account_update_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json_metadata.size() > 0 ) // TODO: move to validate after HF
+            {
+               FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
+               FC_ASSERT( o.account != MUSE_TEMP_ACCOUNT );
+            }
+         }
+         void operator()( const muse::chain::escrow_transfer_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow transfer operation not enabled" );
+         }
+
+         void operator()( const muse::chain::escrow_dispute_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow dispute operation not enabled" );
+         }
+
+         void operator()( const muse::chain::escrow_release_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow release operation not enabled" );
+         }
+
+         void operator()( const muse::chain::custom_json_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json.size() > 0 ) // TODO: move to validate after HF
+               FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
+         }
+
+         void operator()( const muse::chain::report_over_production_operation& o )const {
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "this operation is disabled" ); // TODO: move to validate after HF
+         }
+
          void operator()( const muse::chain::proposal_create_operation& v )const {
             for( const op_wrapper& op : v.proposed_ops )
                 op.op.visit( *this );

@@ -31,7 +31,7 @@ void witness_update_evaluator::do_apply( const witness_update_operation& o )
 {
    db().get_account( o.owner ); // verify owner exists
 
-   FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );
+   FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH ); // TODO: move to validate after HF
 
 
    const auto& by_witness_name_idx = db().get_index_type< witness_index >().indices().get< by_name >();
@@ -59,7 +59,7 @@ void witness_update_evaluator::do_apply( const witness_update_operation& o )
 
 void account_create_evaluator::do_apply( const account_create_operation& o )
 {
-   if ( o.json_metadata.size() > 0 )
+   if ( o.json_metadata.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
@@ -107,7 +107,7 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
 
 void account_update_evaluator::do_apply( const account_update_operation& o )
 {
-   if ( o.json_metadata.size() > 0 )
+   if ( o.json_metadata.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
@@ -149,7 +149,7 @@ void account_update_evaluator::do_apply( const account_update_operation& o )
 
 void escrow_transfer_evaluator::do_apply( const escrow_transfer_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow transfer operation not enabled" );
+   FC_ASSERT( false, "Escrow transfer operation not enabled" ); // TODO: move to validate after HF
 
    const auto& from_account = db().get_account(o.from);
    db().get_account(o.to);
@@ -177,7 +177,7 @@ try {
 
 void escrow_dispute_evaluator::do_apply( const escrow_dispute_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow dispute operation not enabled" );
+   FC_ASSERT( false, "Escrow dispute operation not enabled" ); // TODO: move to validate after HF
    db().get_account(o.from); // check if it exists
 
    const auto& e = db().get_escrow( o.from, o.escrow_id );
@@ -191,7 +191,7 @@ try {
 
 void escrow_release_evaluator::do_apply( const escrow_release_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow release operation not enabled" );
+   FC_ASSERT( false, "Escrow release operation not enabled" ); // TODO: move to validate after HF
    db().get_account(o.from); // check if it exists
    const auto& to_account = db().get_account(o.to);
    db().get_account(o.who); // check if it exists
@@ -489,14 +489,11 @@ void account_witness_vote_evaluator::do_apply( const account_witness_vote_operat
    }
 }
 
-
-
-
 void custom_evaluator::do_apply( const custom_operation& o ){}
 
 void custom_json_evaluator::do_apply( const custom_json_operation& o )
 {
-   if ( o.json.size() > 0 )
+   if ( o.json.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
    }
@@ -595,7 +592,7 @@ void limit_order_cancel_evaluator::do_apply( const limit_order_cancel_operation&
 void report_over_production_evaluator::do_apply( const report_over_production_operation& o )
 {
    FC_ASSERT( !db().is_producing(), "this operation is currently disabled" );
-   FC_ASSERT( false , "this operation is disabled" );
+   FC_ASSERT( false , "this operation is disabled" ); // TODO: move to validate after HF
 
    /*
    const auto& reporter = db().get_account( o.reporter );
