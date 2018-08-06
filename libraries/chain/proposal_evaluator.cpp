@@ -54,6 +54,10 @@ namespace impl {
                FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
          }
 
+         void operator()( const muse::chain::account_create_with_delegation_evaluator& v )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Account creation with delegation is only allowed after Hardfork 0.4" );
+         }
+
          void operator()( const muse::chain::account_update_operation& o )const {
             if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json_metadata.size() > 0 ) // TODO: move to validate after HF
             {
@@ -83,6 +87,10 @@ namespace impl {
 
          void operator()( const muse::chain::report_over_production_operation& o )const {
             FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "this operation is disabled" ); // TODO: move to validate after HF
+         }
+
+         void operator()( const muse::chain::delegate_vesting_shares_operation& v )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Vesting delegation is only allowed after hardfork 0.4" );
          }
 
          void operator()( const muse::chain::proposal_create_operation& v )const {

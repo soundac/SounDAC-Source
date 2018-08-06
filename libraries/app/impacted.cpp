@@ -52,6 +52,12 @@ struct get_impacted_account_visitor
       _impacted.insert( op.creator );
    }
 
+   void operator()( const account_create_with_delegation_operation& op )
+   {
+      _impacted.insert( op.new_account_name );
+      _impacted.insert( op.creator );
+   }
+
    void operator()( const account_update_operation& op )
    {
       _impacted.insert( op.account );
@@ -237,7 +243,17 @@ struct get_impacted_account_visitor
    {
       _impacted.insert( op.approver );
    }
-   //void operator()( const operation& op ){}
+
+   void operator()( const delegate_vesting_shares_operation& op )
+   {
+      _impacted.insert( op.delegator );
+      _impacted.insert( op.delegatee );
+   }
+
+   void operator()( const return_vesting_delegation_operation& op )
+   {
+      _impacted.insert( op.account );
+   }
 };
 
 void operation_get_impacted_accounts( const operation& op, flat_set< string >& result )

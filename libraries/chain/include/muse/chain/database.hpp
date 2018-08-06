@@ -125,6 +125,8 @@ namespace muse { namespace chain {
          void update_account_bandwidth( const account_object& a, uint32_t trx_size );
          void update_account_market_bandwidth( const account_object& a, uint32_t trx_size );
 
+         asset get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const;
+
          void max_bandwidth_per_share()const;
 
          /**
@@ -426,6 +428,7 @@ namespace muse { namespace chain {
          void clear_expired_transactions();
          void clear_expired_proposals();
          void clear_expired_orders();
+         void clear_expired_delegations();
          void process_header_extensions( const signed_block& next_block );
 
          void reset_virtual_schedule_time();
