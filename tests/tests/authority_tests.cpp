@@ -31,6 +31,7 @@
 #include <muse/chain/account_object.hpp>
 #include <muse/chain/asset_object.hpp>
 #include <muse/chain/content_object.hpp>
+#include <muse/chain/history_object.hpp>
 #include <muse/chain/proposal_object.hpp>
 
 #include <fc/crypto/digest.hpp>
@@ -1389,6 +1390,73 @@ BOOST_AUTO_TEST_CASE( proposals_with_mixed_authorities )
       const auto& content2 = db.get_content( "ipfs://abcdefg2" );
       BOOST_CHECK_EQUAL( 40, content2.manage_comp.weight_threshold );
    }
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( nested_proposals )
+{ try {
+   ACTORS( (alice)(bob) );
+   fund( "alice", 100000 );
+
+   db._undo_db.set_max_size( 255 );
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
+   transfer_operation top;
+   top.from = "alice";
+   top.to = "bob";
+   top.amount = asset( 10000000, MUSE_SYMBOL ); // more than she has -> fails
+   proposal_create_operation pco;
+   pco.expiration_time = db.head_block_time() + fc::minutes(1);
+   pco.proposed_ops.emplace_back( top );
+   trx.operations.push_back( pco );
+   PUSH_TX( db, trx );
+   trx.clear();
+   pco.proposed_ops.clear();
+   const auto inner = pidx.begin();
+
+   proposal_update_operation pup;
+   pup.proposal = inner->id;
+   pup.active_approvals_to_add.insert( "alice" );
+   pco.proposed_ops.emplace_back( pup );
+   pup.active_approvals_to_add.clear();
+   pup.active_approvals_to_remove.insert( "alice" );
+   pco.proposed_ops.emplace_back( pup );
+   pup.active_approvals_to_add.insert( "alice" );
+   pup.active_approvals_to_remove.clear();
+   pco.proposed_ops.emplace_back( pup );
+   pco.proposed_ops.emplace_back( top );
+   trx.operations.push_back( pco );
+   PUSH_TX( db, trx );
+   trx.clear();
+   pco.proposed_ops.clear();
+   auto middle = inner; middle++;
+
+   pup.proposal = middle->id;
+   pco.proposed_ops.emplace_back( pup );
+   pup.active_approvals_to_add.clear();
+   pup.active_approvals_to_remove.insert( "alice" );
+   pco.proposed_ops.emplace_back( pup );
+   pup.active_approvals_to_add.insert( "alice" );
+   pup.active_approvals_to_remove.clear();
+   pco.proposed_ops.emplace_back( pup );
+   pco.proposed_ops.emplace_back( top );
+   trx.operations.push_back( pco );
+   PUSH_TX( db, trx );
+   trx.clear();
+   pco.proposed_ops.clear();
+   auto outer = middle; outer++;
+
+   uint32_t executions = 0;
+   db.pre_apply_operation.connect([&executions]( const operation_object& o ) {
+      if( o.op.which() == operation::tag<proposal_update_operation>().value )
+         executions++;
+   });
+   pup.proposal = outer->id;
+   trx.operations.push_back( pup );
+   sign( trx, alice_private_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+   BOOST_CHECK_EQUAL( 10, executions );
+
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( basic_authority )
