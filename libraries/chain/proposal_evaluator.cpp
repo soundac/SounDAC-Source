@@ -94,8 +94,17 @@ namespace impl {
          }
 
          void operator()( const muse::chain::proposal_create_operation& v )const {
-            for( const op_wrapper& op : v.proposed_ops )
-                op.op.visit( *this );
+            bool proposal_update_seen = false;
+            for (const op_wrapper &op : v.proposed_ops)
+            {
+               op.op.visit(*this);
+               if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) // TODO: move to proposal_create.validate after HF
+                       && op.op.which() == operation::tag<proposal_update_operation>().value )
+               {
+                  FC_ASSERT( !proposal_update_seen, "At most one proposal update can be nested in a proposal!" );
+                  proposal_update_seen = true;
+               }
+            }
          }
 
          void operator()( const muse::chain::withdraw_vesting_operation& v )const {
