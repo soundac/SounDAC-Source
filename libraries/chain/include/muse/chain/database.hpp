@@ -480,5 +480,8 @@ namespace muse { namespace chain {
           * database::close() has not been called, or failed during execution.
           */
          bool                              _opened = false;
+
+         // Counts nested proposal updates
+         uint32_t                          _push_proposal_nesting_depth = 0;
    };
 } }
