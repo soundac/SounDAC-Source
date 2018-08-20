@@ -14,7 +14,7 @@ certain predefined tag names.
 How to Tag
 ----------
 
-A tag is created by publishing a [``custom_json_operation``](https://github.com/themuseblockchain/Muse-Source/blob/0.3.0/libraries/chain/include/muse/chain/protocol/base_operations.hpp#L365).
+A tag is created by publishing a [``custom_json_operation``](https://github.com/soundac/SounDAC-Source/blob/0.3.0/libraries/chain/include/muse/chain/protocol/base_operations.hpp#L365).
 
 The ``custom_json_operation`` must fulfill these requirements in order to be considered as a tagging operation:
 
