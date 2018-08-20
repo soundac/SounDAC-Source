@@ -1,9 +1,9 @@
-Introducing MUSE (beta)
------------------
+Introducing SounDAC
+-------------------
 
-MUSE is a blockchain which uses Delegated Proof Of Stake (DPOS) as a consensus algorithm.
+SounDAC (formerly known as MUSE) is a blockchain which uses Delegated Proof Of Stake (DPOS) as a consensus algorithm.
 
-  - Currency Symbol MUSE 
+  - Currency Symbol XSD
   - Approximately 9,5% APR long term inflation rate
 
 
@@ -22,7 +22,7 @@ Build Status
 
 **master** | **develop** | **next_hardfork**
  --- | --- | ---
- [![master Build Status](https://travis-ci.org/themuseblockchain/Muse-Source.svg?branch=master)](https://travis-ci.org/themuseblockchain/Muse-Source) | [![develop Build Status](https://travis-ci.org/themuseblockchain/Muse-Source.svg?branch=develop)](https://travis-ci.org/themuseblockchain/Muse-Source) | [![next_hardfork Build Status](https://travis-ci.org/themuseblockchain/Muse-Source.svg?branch=next_hardfork)](https://travis-ci.org/themuseblockchain/Muse-Source)
+ [![master Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=master)](https://travis-ci.org/soundac/SounDAC-Source) | [![develop Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=develop)](https://travis-ci.org/soundac/SounDAC-Source) | [![next_hardfork Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=next_hardfork)](https://travis-ci.org/soundac/SounDAC-Source)
 
 Code is Documentation
 ---------------------
@@ -40,24 +40,24 @@ We are testing using Fedora 25, x64
 
     sudo dnf clean metadata
     sudo dnf install automake autoconf libtool make cmake gcc flex bison doxygen gettext-devel git readline-devel openssl-devel libcurl-devel ncurses-devel boost-devel boost-static gcc-c++
-    mkdir -p ~/dev/MUSE
-    cd ~/dev/MUSE
-    git clone https://github.com/themuseblockchain/Muse-Source.git
-    cd ~/dev/MUSE/Muse-Source
+    mkdir -p ~/dev/SounDAC
+    cd ~/dev/SounDAC
+    git clone https://github.com/soundac/SounDAC-Source.git
+    cd ~/dev/SounDAC/SounDAC-Source
     git submodule update --init --recursive
-    mkdir -p ~/dev/MUSE/MUSE-build
-    cd ../MUSE-build
+    mkdir -p ~/dev/SounDAC/SounDAC-build
+    cd ../SounDAC-build
     #optionally specify Boost root directory in case it is not installed on standard paths with -DBOOST_ROOT=/location/
     
     #For production build
-    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug ~/dev/MUSE/Muse-Source/ 
+    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug ~/dev/SounDAC/SounDAC-Source/
     #For test net build
-    cmake -G "Unix Makefiles" -DBUILD_MUSE_TEST=ON -DCMAKE_BUILD_TYPE=Debug ~/dev/MUSE/Muse-Source/
+    cmake -G "Unix Makefiles" -DBUILD_MUSE_TEST=ON -DCMAKE_BUILD_TYPE=Debug ~/dev/SounDAC/SounDAC-Source/
     
     #optionally, install the binaries
     cmake --build . --target all -- -j 3
     
-Now the binaries shall be in directory ~/dev/MUSE/MUSE-build/programs/
+Now the binaries shall be in directory ~/dev/SounDAC/SounDAC-build/programs/
 
 Seed Nodes
 ----------
@@ -66,16 +66,15 @@ Seed Nodes
 
 How to Start
 ------------
-First, start MUSE daemon:
+First, start SounDAC daemon:
 (Witness will need additional config)
 
-    cd ~/dev/MUSE/MUSE-build
+    cd ~/dev/SounDAC/SounDAC-build
     #For production: (genesis is embedded)
-    ./programs/mused/mused -s 138.197.68.175:33333 --replay-blockchain --rpc-endpoint=0.0.0.0:8090
-    #--replay-blockchain may be ommited the next time you start the block chain
+    ./programs/mused/mused --rpc-endpoint=0.0.0.0:8090
    
     #For testnet
-    ./programs/mused/mused -s 192.34.60.157:29092 --replay-blockchain --rpc-endpoint=0.0.0.0:8090 --genesis-json ~/dev/MUSE/Muse-Source/genesis-test.json
+    ./programs/mused/mused -s 192.34.60.157:29092 --rpc-endpoint=0.0.0.0:8090 --genesis-json ~/dev/SounDAC/SounDAC-Source/genesis-test.json
     
 The daemon is ready. The JSON-RPC is listening on localhost on port 8090
 
@@ -101,7 +100,7 @@ Ensure you have opened ports in your firewall.
     6- Set value of witness your account, and private-key to the private owner wif generated, then save file
     You may also want to set enable-stale-production to true
     7- Launch node again:
-    ./mused -s 138.197.68.175:33333 --replay-blockchain --rpc-endpoint=127.0.0.1:8090 
+    ./mused --rpc-endpoint=127.0.0.1:8090 
     8- muse is running... in another session, go to %muse build folder%/cli_wallet
     9- Run cli_wallet:
     ./cli_wallet
@@ -116,4 +115,3 @@ Ensure you have opened ports in your firewall.
     16- announce yourself as a witness, change placeholders: update_witness "WitnessAccountName" "http://%???%" %witness_pub_key% {} true
     17- get votes... use wallet to vote, ask someone to vote
     18- at this point, you have votes, your node may be selected as an active witness and start produce blocks
-

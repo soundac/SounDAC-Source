@@ -1,5 +1,7 @@
 language: c++
 
+cache: ccache
+
 git:
   depth: 1
 
@@ -10,7 +12,19 @@ sudo: true
 install:
  - echo "deb http://de.archive.ubuntu.com/ubuntu xenial main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
  - sudo apt-get update
- - sudo apt-get install --allow-unauthenticated g++ libboost-all-dev cmake libreadline-dev libssl-dev autoconf
+ - sudo apt-get install --allow-unauthenticated g++ libboost-all-dev cmake libreadline-dev libssl-dev autoconf parallel ccache
+
+addons:
+  sonarcloud:
+    organization: "soundac"
+    token:
+      secure: "nJiutcTRv8dirtQ77NhychWBD7KSmmpSdwi/J5pfT+CBQBNPiYYYxR1wgl1p73FAXcjMORFBt9sOc5enuWvudmRezBGZ2ABMcYaGJZI6EDSKiAsOl3IQlpAMk8E8WLxC9mauu+Ojb480XImGq9WU4ti39/9VH0EpR4ljTYdh45Dq8R/U7LgsJeYyJCWxxQm0usozqaaMb47NgA3RRJWV1MVy8y6b4LYT2OdfsqXGm0t47VPyech3VUrylLGHqN69/5QwiNAmxYxDy0NS0mT3LZ8gBi0rmghFtxe2MQkxHTxiH4g0fG9XVzzWNw82nMKdZRveV+WCyi9odVsdAAjgrJPU0EzEGF3xoG3DFkOyp/tSSxGaVaptklsJ1iUU9Sl8nd2MYg6Nzz3/Ak+Q3KlJtmJ5SjzokXtGDThlk12Ac09YE2949BvrDG2QhIUMc8g9tKbXYM/evUCrGH+KlXyAPKDcHEo2X+F0933Wpn1BFepULctbJh7Q2+HANwsrARBKCpsG/FQ7cftH1YDOJhkDp10iDNH+sQ0lvsl7p0vjbWdtsrooel0IGu50Fh8AiHKRc1XYkgM1AVfB1z3JC2NHaHepbFVhWm4fYppt5GnreK5i3sn/MXir/Kwa1Xsu7CmWx3XJDNfpx+YB35uIyqOYILt5gyNWVW+ODb1QRFMcYCw="
+
+env:
+  global:
+    - CCACHE_COMPRESS=exists_means_true
+    - CCACHE_MAXSIZE=1Gi
+    - CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,time_macros
 
 script:
  - cmake -DCMAKE_BUILD_TYPE=Debug -DBoost_USE_STATIC_LIBS=OFF .
