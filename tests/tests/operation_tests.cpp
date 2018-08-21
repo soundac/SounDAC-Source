@@ -259,10 +259,10 @@ BOOST_AUTO_TEST_CASE( account_create_with_delegation_apply )
 
    generate_block();
 
-   db.modify( db.get_witness_schedule_object(), [&]( witness_schedule_object& w ) {
-      w.median_props.account_creation_fee = asset( 10, MUSE_SYMBOL );
+   db.modify( db.get_witness_schedule_object(), []( witness_schedule_object& w ) {
+      w.median_props.account_creation_fee = asset( 300, MUSE_SYMBOL );
       // actually required VESTS for new account:
-      // account_creation_fee * MUSE_CREATE_ACCOUNT_WITH_MUSE_MODIFIER * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO * vesting_share_price
+      // account_creation_fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO * vesting_share_price
       // where fee in MUSE counts as fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO * vesting_share_price
       // and delegated shares count as themselves
    });
@@ -302,7 +302,7 @@ BOOST_AUTO_TEST_CASE( account_create_with_delegation_apply )
    MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
    tx.clear();
 
-   // Required: 10*30*5*1000 = 1500000
+   // Required: 300*5*1000 = 1500000
    op.fee = asset( 100, MUSE_SYMBOL );
    op.delegation = asset( 1000000, VESTS_SYMBOL );
    // Present: 100 MUSE*5*1000 + 1000000 VESTS

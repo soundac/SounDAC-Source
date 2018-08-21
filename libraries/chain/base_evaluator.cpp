@@ -122,7 +122,7 @@ void account_create_with_delegation_evaluator::do_apply( const account_create_wi
                ( "creator.vesting_shares", creator.vesting_shares )
                ( "creator.delegated_vesting_shares", creator.delegated_vesting_shares )( "required", o.delegation ) );
 
-   auto target_delegation = asset( wso.median_props.account_creation_fee.amount * MUSE_CREATE_ACCOUNT_WITH_MUSE_MODIFIER * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO, MUSE_SYMBOL ) * props.get_vesting_share_price();
+   auto target_delegation = asset( wso.median_props.account_creation_fee.amount * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO, MUSE_SYMBOL ) * props.get_vesting_share_price();
 
    auto current_delegation = asset( o.fee.amount * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO, MUSE_SYMBOL ) * props.get_vesting_share_price() + o.delegation;
 
@@ -132,10 +132,6 @@ void account_create_with_delegation_evaluator::do_apply( const account_create_wi
                ( "account_creation_fee", wso.median_props.account_creation_fee )
                ( "o.fee", o.fee )
                ( "o.delegation", o.delegation ) );
-
-   FC_ASSERT( o.fee >= wso.median_props.account_creation_fee, "Insufficient fee: ${f} required, ${p} provided.",
-               ("f", wso.median_props.account_creation_fee)
-               ("p", o.fee) );
 
    for( const auto& a : o.owner.account_auths )
    {
