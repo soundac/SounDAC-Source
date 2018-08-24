@@ -485,8 +485,15 @@ void database::update_account_bandwidth( const account_object& a, uint32_t trx_s
          acnt.lifetime_bandwidth += N;
          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
             acnt.average_bandwidth = N;
-         else
+         else if( has_hardfork(MUSE_HARDFORK_0_4) )
          {
+            auto old_weight = acnt.average_bandwidth;
+            if( delta_time > 0 )
+               old_weight = old_weight * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
+            acnt.average_bandwidth = old_weight + N;
+         }
+         else
+         {  // TODO: remove after HF
             auto old_weight = acnt.average_bandwidth * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time);
             auto new_weight = delta_time * N;
             acnt.average_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
