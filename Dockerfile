@@ -1,5 +1,5 @@
-FROM educatedwarrior/invictus_image:1.59
-MAINTAINER educatedwarrior 
+FROM soundac/soundac-source:latest
+MAINTAINER soundac 
 
 ENV LANG en_US.UTF-8
 ENV REPOLINK https://github.com/soundac/SounDAC-Source.git
