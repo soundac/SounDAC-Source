@@ -1,31 +1,71 @@
-FROM soundac/soundac-source:latest
-MAINTAINER soundac 
+# Get Ubuntu 16.04
+FROM phusion/baseimage:0.9.19
 
-ENV LANG en_US.UTF-8
+# Set Variables
+ENV SHORTDIR /usr/local/src
+ENV WORKDIR "${SHORTDIR}/Soundac-Source"
+ENV BUILDDIR "${WORKDIR}/build"
+ENV DATADIR "${WORKDIR}/build"
 ENV REPOLINK https://github.com/soundac/SounDAC-Source.git
-ENV WORKDIR /opt/soundac/bin
-ENV DATADIR /opt/soundac/bin/witness_node_data_dir
+ENV LANG=en_US.UTF-8
 
-VOLUME "$DATADIR"
+# Make Ports Available
 EXPOSE 8090
 EXPOSE 33333
 
-CMD ["/entrypoint.sh"]
-
-RUN mkdir -p "$DATADIR"
-
-#Build blockchain source
+# Build Linux Environement With Dependencies
 RUN \
-	cd /tmp && git clone "$REPOLINK" && \
-	cd SounDAC-Source && \
-	git submodule update --init --recursive && \
-	cmake -j 8 -DBOOST_ROOT="$BOOST_ROOT" -DBUILD_MUSE_TEST=OFF -DCMAKE_BUILD_TYPE=Release . && \
-	make mused cli_wallet
+    apt-get update && \
+    apt-get install -y \
+        autoconf \
+        automake \
+        autotools-dev \
+        bsdmainutils \
+        build-essential \
+        cmake \
+        doxygen \
+        gdb \
+        git \
+        libboost-all-dev \
+        libyajl-dev \
+        libreadline-dev \
+        libssl-dev \
+        libtool \
+        liblz4-tool \
+        ncurses-dev \
+        pkg-config \
+        python3 \
+        python3-dev \
+        python3-jinja2 \
+        python3-pip \
+        nginx \
+        fcgiwrap \
+        awscli \
+        jq \
+        wget \
+        virtualenv \
+        gdb \
+        libgflags-dev \
+        libsnappy-dev \
+        zlib1g-dev \
+        libbz2-dev \
+        liblz4-dev \
+        libzstd-dev \
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    pip3 install gcovr
 
-# Make binary builds available for general-system wide use 
+# Build Soundac-Source
 RUN \
-        cd /tmp/SounDAC-Source && \
-	install -s programs/mused/mused /usr/bin/mused && \
-	install -s programs/cli_wallet/cli_wallet /usr/bin/cli_wallet && \
-        cp Docker/config.ini "$WORKDIR/config.ini.default" && \
-        install -m 0755 Docker/entrypoint.sh "$WORKDIR/"
+    cd "${SHORTDIR}" && \
+    git clone "${REPOLINK}" && \
+    cd "${WORKDIR}" && \
+    git submodule update --init --recursive && \
+    mkdir -p "${BUILDDIR}" && \
+    cd "${BUILDDIR}" && \
+    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug "${WORKDIR}"
+    cmake --build . --target all -- -j 3
+
+# EntryPoint for Config
+CMD "${WORKDIR}/Docker/entrypoint.sh"

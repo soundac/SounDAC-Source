@@ -1,9 +1,11 @@
 #!/bin/sh
 
-cd ${WORKDIR}
-
-if [ ! -f "${DATADIR}/config.ini" ]; then
-    cp "${WORKDIR}/config.ini.default" "${DATADIR}/config.ini"
+# Copy Config file if doesn't exist
+if [ -f "${DATADIR}/config.ini" ]
+  then
+    echo
+  else
+    cp "${WORKDIR}/config.ini" ${DATADIR}
 fi
 
-exec /usr/bin/mused -d "${DATADIR}/" "$@"
+exec "${DATADIR}/mused" --replay-blockchain
