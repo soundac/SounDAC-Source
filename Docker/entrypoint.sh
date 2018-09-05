@@ -5,7 +5,7 @@ if [ -f "${DATADIR}/config.ini" ]
   then
     echo
   else
-    cp "${WORKDIR}/config.ini" ${DATADIR}
+    cp "${WORKDIR}/Docker/config.ini" ${DATADIR}
 fi
 
 # Start the node and make sure the blockchain is up to date
