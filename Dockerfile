@@ -64,7 +64,7 @@ RUN \
     git submodule update --init --recursive && \
     mkdir -p "${BUILDDIR}" && \
     cd "${BUILDDIR}" && \
-    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug "${WORKDIR}"
+    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug "${WORKDIR}" && \
     cmake --build . --target all -- -j 3
 
 # EntryPoint for Config
