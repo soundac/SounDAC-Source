@@ -5,7 +5,7 @@ FROM phusion/baseimage:0.9.19
 ENV SHORTDIR /usr/local/src
 ENV WORKDIR "${SHORTDIR}/Soundac-Source"
 ENV BUILDDIR "${WORKDIR}/build"
-ENV DATADIR "${WORKDIR}/build"
+ENV DATADIR "${BUILDDIR}/witness_node_data_dir"
 ENV REPOLINK https://github.com/soundac/SounDAC-Source.git
 ENV LANG=en_US.UTF-8
 

@@ -8,4 +8,4 @@ if [ -f "${DATADIR}/config.ini" ]
     cp "${WORKDIR}/config.ini" ${DATADIR}
 fi
 
-exec "${DATADIR}/mused" --replay-blockchain
+exec "${BUILDDIR}/programs/mused" --replay-blockchain
