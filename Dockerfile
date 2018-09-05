@@ -56,6 +56,9 @@ RUN \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
     pip3 install gcovr
 
+# Make folder available
+ADD . "${WORKDIR}"
+
 # Build Soundac-Source
 RUN \
     cd "${SHORTDIR}" && \
