@@ -71,5 +71,5 @@ RUN \
     cmake --build . --target all -- -j 3
 
 # EntryPoint for Config
-RUN cd "$WORKDIR" && chmod +x /Docker/entrypoint.sh
+RUN chmod +x "${WORKDIR}/Docker/entrypoint.sh"
 CMD "${WORKDIR}/Docker/entrypoint.sh"
