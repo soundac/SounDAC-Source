@@ -10,6 +10,8 @@ ENV REPOLINK https://github.com/soundac/SounDAC-Source.git
 ENV LANG=en_US.UTF-8
 
 # Make Ports Available
+EXPOSE 80
+EXPOSE 443
 EXPOSE 8090
 EXPOSE 33333
 
