@@ -1,5 +1,6 @@
 # Get Ubuntu 16.04
 FROM phusion/baseimage:0.9.19
+MAINTAINER soundac 
 
 # Set Variables
 ENV SHORTDIR /usr/local/src
@@ -63,8 +64,7 @@ ADD . "${WORKDIR}"
 
 # Build Soundac-Source
 RUN \
-    cd "${SHORTDIR}" && \
-    git clone "${REPOLINK}" && \
+    cd "${SHORTDIR}" && git clone "$REPOLINK" && \
     cd "${WORKDIR}" && \
     git submodule update --init --recursive && \
     mkdir -p "${BUILDDIR}" && \
