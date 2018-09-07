@@ -4,7 +4,7 @@ Introducing SounDAC
 SounDAC (formerly known as MUSE) is a blockchain which uses Delegated Proof Of Stake (DPOS) as a consensus algorithm.
 
   - Currency Symbol XSD
-  - Approximately 9,5% APR long term inflation rate
+  - Approximately 4,5% APR long term inflation rate
 
 
 No Support & No Warranty 
