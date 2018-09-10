@@ -59,15 +59,22 @@ RUN \
 # Make folder available
 ADD . "${WORKDIR}"
 
+# Pull Repo
+RUN \
+    cd "${SHORTDIR}" && git clone "$REPOLINK"
+
+# Pull & Update Submodules
+RUN \
+    cd "${WORKDIR}" && git submodule update --init --recursive
+
 # Build Soundac-Source
 RUN \
-    cd "${SHORTDIR}" && git clone "$REPOLINK" && \
-    cd "${WORKDIR}" && \
-    git submodule update --init --recursive && \
-    mkdir -p "${BUILDDIR}" && \
-    cd "${BUILDDIR}" && \
+    mkdir -p "${BUILDDIR}" && cd "${BUILDDIR}" && \
     cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Release "${WORKDIR}" && \
     cmake --build "${BUILDDIR}" --target all -- -j 3
+
+# Copy Config.ini
+RUN cp "${WORKDIR}/Docker/config.ini" "${DATADIR}"
 
 # EntryPoint for Config
 RUN chmod +x "${WORKDIR}/Docker/entrypoint.sh"
