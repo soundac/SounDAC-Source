@@ -57,7 +57,7 @@ RUN \
     pip3 install gcovr
 
 # Make folder available
-ADD . "${WORKDIR}"
+# ADD . "${WORKDIR}"
 
 # Pull Repo
 RUN \
