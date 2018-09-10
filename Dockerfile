@@ -74,7 +74,7 @@ RUN \
     cmake --build "${BUILDDIR}" --target all -- -j 3
 
 # Copy Config.ini
-RUN cp "${WORKDIR}/Docker/config.ini" "${DATADIR}"
+# RUN cp "${WORKDIR}/Docker/config.ini" "${DATADIR}"
 
 # EntryPoint for Config
 RUN chmod +x "${WORKDIR}/Docker/entrypoint.sh"
