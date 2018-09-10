@@ -1,6 +1,5 @@
 # Get Ubuntu 16.04
 FROM phusion/baseimage:0.9.19
-MAINTAINER soundac 
 
 # Set Variables
 ENV SHORTDIR /usr/local/src
@@ -12,8 +11,6 @@ ENV LANG=en_US.UTF-8
 
 # Make Ports Available
 EXPOSE 80
-EXPOSE 443
-EXPOSE 8090
 EXPOSE 33333
 
 # Build Linux Environement With Dependencies
@@ -69,8 +66,8 @@ RUN \
     git submodule update --init --recursive && \
     mkdir -p "${BUILDDIR}" && \
     cd "${BUILDDIR}" && \
-    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Debug "${WORKDIR}" && \
-    cmake --build . --target all -- -j 3
+    cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Release "${WORKDIR}" && \
+    cmake --build "${BUILDDIR}" --target all -- -j 3
 
 # EntryPoint for Config
 RUN chmod +x "${WORKDIR}/Docker/entrypoint.sh"
