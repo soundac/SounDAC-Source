@@ -38,6 +38,13 @@ WORKDIR /SounDAC-Source
 
 # Compile
 RUN \
+    ( git submodule sync --recursive || \
+      find `pwd`  -type f -name .git | \
+        while read f; do \
+          rel="$(echo "${f#$PWD/}" | sed 's=[^/]*/=../=g')"; \
+          sed -i "s=: .*/.git/=: $rel/=" "$f"; \
+        done && \
+      git submodule sync --recursive ) && \
     git submodule update --init --recursive && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
