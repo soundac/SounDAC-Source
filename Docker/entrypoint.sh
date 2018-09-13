@@ -5,8 +5,9 @@ if [ -f "${DATADIR}/config.ini" ]
   then
     echo
   else
-    cp "${WORKDIR}/Docker/config.ini" ${DATADIR}
+    cp "${WORKDIR}/Docker/config.ini" "${DATADIR}/config.ini"
 fi
+
 
 # Start the node and make sure the blockchain is up to date
 exec "${BUILDDIR}/programs/mused/mused" --replay-blockchain

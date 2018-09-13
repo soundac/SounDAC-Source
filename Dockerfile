@@ -7,10 +7,11 @@ ENV WORKDIR "${SHORTDIR}/SounDAC-Source"
 ENV BUILDDIR "${WORKDIR}/build"
 ENV DATADIR "${BUILDDIR}/witness_node_data_dir"
 ENV REPOLINK https://github.com/soundac/SounDAC-Source.git
+ENV BRANCH release_candidate
 ENV LANG=en_US.UTF-8
 
 # Make Ports Available
-EXPOSE 80
+EXPOSE 8090
 EXPOSE 33333
 
 # Build Linux Environement With Dependencies
@@ -56,22 +57,24 @@ RUN \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
     pip3 install gcovr
 
-# Make folder available
-# ADD . "${WORKDIR}"
-
 # Pull Repo
 RUN \
     cd "${SHORTDIR}" && git clone "$REPOLINK"
 
 # Pull & Update Submodules
 RUN \
-    cd "${WORKDIR}" && git submodule update --init --recursive
+    cd "${WORKDIR}" && git checkout "$BRANCH" && \
+    git submodule update --init --recursive
 
 # Build Soundac-Source
 RUN \
     mkdir -p "${BUILDDIR}" && cd "${BUILDDIR}" && \
     cmake -G "Unix Makefiles" -D CMAKE_BUILD_TYPE=Release "${WORKDIR}" && \
     cmake --build "${BUILDDIR}" --target all -- -j 3
+
+# Copy Config
+RUN \
+    mkdir -p "${DATADIR}"
 
 # EntryPoint for Config
 RUN chmod +x "${WORKDIR}/Docker/entrypoint.sh"
