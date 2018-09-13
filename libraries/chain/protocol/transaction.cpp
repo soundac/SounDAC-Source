@@ -409,6 +409,12 @@ set<public_key_type> signed_transaction::get_required_signatures(
    vector<authority> other;
    get_required_authorities( required_active, required_owner, required_basic, required_master_content, required_comp_content, other );
 
+   // Active or owner authorities also cover basic authority
+   for( const string& a : required_active )
+      required_basic.erase( a );
+   for( const string& o : required_owner )
+      required_basic.erase( o );
+
    /** basic authority cannot be mixed with active authority in same transaction */
    if( required_basic.size() ) {
       sign_state s(get_signature_keys( chain_id ),get_basic,available_keys);
