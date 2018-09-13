@@ -65,7 +65,7 @@ RUN \
 #
 # Build smaller runtime image
 #
-FROM phusion/baseimage:0.10.1 AS build
+FROM phusion/baseimage:0.10.1
 
 # Set Variables
 ENV DATADIR "/data"
