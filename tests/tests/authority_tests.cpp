@@ -1464,25 +1464,46 @@ BOOST_AUTO_TEST_CASE( basic_authority )
 { try {
    generate_block();
 
-   ACTORS( (alice)(brenda) );
+   ACTORS( (alice)(brenda)(charlene) );
 
    const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
 
-   proposal_create_operation pco;
+   // friendship requires basic auth, signed with post key
    friendship_operation friend_op;
    friend_op.who = "alice";
-   friend_op.whom = "brenda";
+   friend_op.whom = "brenda"; // a -> b
+   trx.operations.push_back( friend_op );
+   sign( trx, alice_post_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+
+   // signed with active key
+   friend_op.whom = "charlene"; // a -> c
+   trx.operations.push_back( friend_op );
+   sign( trx, alice_private_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+
+   proposal_create_operation pco;
+   friend_op.who = "brenda"; // b -> c
    pco.proposed_ops.emplace_back( friend_op );
    pco.expiration_time = db.head_block_time() + fc::minutes(1);
    trx.operations.push_back( pco );
    PUSH_TX( db, trx );
    trx.clear();
+   pco.proposed_ops.clear();
 
+   // approve proposal with active, sign with post
    proposal_update_operation pup;
    pup.proposal = pidx.begin()->id;
-   pup.active_approvals_to_add.insert( "alice" );
+   pup.active_approvals_to_add.insert( "brenda" );
    trx.operations.push_back( pup );
-   sign( trx, alice_private_key );
+   sign( trx, brenda_post_key );
+   BOOST_CHECK_THROW( PUSH_TX( db, trx ), tx_missing_active_auth );
+   trx.signatures.clear();
+
+   // sign with active
+   sign( trx, brenda_private_key );
    PUSH_TX( db, trx );
    trx.clear();
 
