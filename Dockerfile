@@ -1,5 +1,5 @@
 # Get Ubuntu 16.04
-FROM phusion/baseimage:0.10.1
+FROM phusion/baseimage:0.10.1 AS build
 
 # Set Variables
 ENV DATADIR "/data"
@@ -8,6 +8,8 @@ ENV LANG=en_US.UTF-8
 # Make Ports Available
 EXPOSE 8090
 EXPOSE 33333
+
+RUN mkdir -p "${DATADIR}" /usr/local/bin
 
 # EntryPoint for Config
 CMD [ "/entrypoint.sh" ]
@@ -58,5 +60,28 @@ RUN \
     # Obtain version
     git rev-parse --short HEAD > /etc/SounDAC/version && \
     cd / && \
-    rm -rf /SounDAC-Source && \
-    mkdir -p "${DATADIR}"
+    rm -rf /SounDAC-Source
+
+#
+# Build smaller runtime image
+#
+FROM phusion/baseimage:0.10.1 AS build
+
+# Set Variables
+ENV DATADIR "/data"
+ENV LANG=en_US.UTF-8
+
+# Make Ports Available
+EXPOSE 8090
+EXPOSE 33333
+
+RUN mkdir -p "${DATADIR}" /usr/local/bin /etc/SounDAC
+
+# EntryPoint for Config
+CMD [ "/entrypoint.sh" ]
+
+COPY --from=build /entrypoint.sh /entrypoint.sh
+COPY --from=build /etc/SounDAC/config.ini /etc/SounDAC/config.ini
+COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
+COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
+COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
