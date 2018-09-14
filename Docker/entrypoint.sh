@@ -1,12 +1,11 @@
 #!/bin/sh
 
 # Copy Config file if doesn't exist
-if [ -f "${DATADIR}/config.ini" ]
+if [ ! -f "${DATADIR}/config.ini" ]
   then
-    echo
-  else
-    cp "${WORKDIR}/Docker/config.ini" ${DATADIR}
+    cp "/etc/SounDAC/config.ini" "${DATADIR}/config.ini"
 fi
 
+
 # Start the node and make sure the blockchain is up to date
-exec "${BUILDDIR}/programs/mused/mused" --replay-blockchain
+exec "/usr/local/bin/mused" --data-dir="${DATADIR}" "$@"
