@@ -1,9 +1,11 @@
 #!/bin/sh
 
-cd ${WORKDIR}
-
-if [ ! -f "${DATADIR}/config.ini" ]; then
-    cp "${WORKDIR}/config.ini.default" "${DATADIR}/config.ini"
+# Copy Config file if doesn't exist
+if [ ! -f "${DATADIR}/config.ini" ]
+  then
+    cp "/etc/SounDAC/config.ini" "${DATADIR}/config.ini"
 fi
 
-exec /usr/bin/mused -d "${DATADIR}/" "$@"
+
+# Start the node and make sure the blockchain is up to date
+exec "/usr/local/bin/mused" --data-dir="${DATADIR}" "$@"
