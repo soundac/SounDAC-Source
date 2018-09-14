@@ -8,4 +8,4 @@ fi
 
 
 # Start the node and make sure the blockchain is up to date
-exec "/usr/local/bin/mused" "$@"
+exec "/usr/local/bin/mused" --data-dir="${DATADIR}" "$@"
