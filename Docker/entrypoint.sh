@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Copy Config file if doesn't exist
-if [ !-f "${DATADIR}/config.ini" ]
+if [ ! -f "${DATADIR}/config.ini" ]
   then
     cp "/etc/SounDAC/config.ini" "${DATADIR}/config.ini"
 fi
