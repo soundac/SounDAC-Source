@@ -32,7 +32,7 @@ Additional options passed to the entry point script will be passed through to
 
 Example:
 
-    docker run --rm --network host -ti -v /data/blockchain/:/data:rw soundac/soundac-source:master
+    docker run --rm --network host -ti -v /data/blockchain/:/data:rw soundac/soundac-source:latest
 
 ### Default config
 
