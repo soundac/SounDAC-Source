@@ -27,14 +27,10 @@ env:
     - CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,time_macros
 
 script:
- - cmake -DCMAKE_BUILD_TYPE=Debug -DBoost_USE_STATIC_LIBS=OFF .
- - make -j 2
- - tests/chain_test | cat
- - tests/plugin_test | cat
- - cd libraries/fc
- - tests/all_tests | cat
- - tests/api | cat
- - tests/bip_lock | cat
- - tests/ecc_test README.md | cat
- - tests/log_test | cat
- - tests/sha_test | cat
+ - sed -i '/subdirectory.*tests/d' libraries/fc/CMakeLists.txt
+ - cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage -DBoost_USE_STATIC_LIBS=OFF -DCMAKE_CXX_OUTPUT_EXTENSION_REPLACE=ON .
+ - 'which build-wrapper-linux-x86-64 && build-wrapper-linux-x86-64 --out-dir bw-output make -j 2 || make -j 2'
+ - tests/chain_test  2>&1 | cat
+ - tests/plugin_test 2>&1 | cat
+ - 'find libraries/[acdemnpuw]*/CMakeFiles/*.dir programs/[cjmsu]*/CMakeFiles/*.dir -type d | while read d; do gcov -o "$d" "${d/CMakeFiles*.dir/./}"/*.cpp; done >/dev/null'
+ - 'which sonar-scanner && sonar-scanner || true'
