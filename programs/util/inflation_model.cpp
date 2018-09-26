@@ -70,7 +70,6 @@ int main( int argc, char** argv, char** envp )
 
 /*
 #define MUSE_GENESIS_TIME                    (fc::time_point_sec(1458835200))
-#define MUSE_MINING_TIME                     (fc::time_point_sec(1458838800))
 #define MUSE_FIRST_CASHOUT_TIME              (fc::time_point_sec(1467590400))  /// July 4th
 */
 
