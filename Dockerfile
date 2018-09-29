@@ -51,8 +51,8 @@ RUN \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         . && \
-    make mused cli_wallet && \
-    install -s programs/mused/mused programs/cli_wallet/cli_wallet /usr/local/bin && \
+    make mused cli_wallet get_dev_key && \
+    install -s programs/mused/mused programs/cli_wallet/cli_wallet programs/util/get_dev_key /usr/local/bin && \
     install -d /etc/SounDAC && \
     install -m 0644 Docker/config.ini /etc/SounDAC/ && \
     install -m 0755 Docker/entrypoint.sh / && \
