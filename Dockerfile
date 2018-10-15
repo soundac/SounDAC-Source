@@ -85,3 +85,4 @@ COPY --from=build /etc/SounDAC/config.ini /etc/SounDAC/config.ini
 COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
 COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
 COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
+COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
