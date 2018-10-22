@@ -6,8 +6,8 @@ ENV DATADIR "/data"
 ENV LANG=en_US.UTF-8
 
 # Make Ports Available
-EXPOSE 8090
-EXPOSE 33333
+EXPOSE 18090
+EXPOSE 33332
 
 RUN mkdir -p "${DATADIR}" /usr/local/bin
 
