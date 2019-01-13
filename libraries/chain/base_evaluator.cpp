@@ -365,7 +365,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
          wvdo.auto_vest = o.auto_vest;
       });
 
-      db().modify( from_account, [&]( account_object& a )
+      db().modify( from_account, []( account_object& a )
       {
          a.withdraw_routes++;
       });
@@ -374,7 +374,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
    {
       db().remove( *itr );
 
-      db().modify( from_account, [&]( account_object& a )
+      db().modify( from_account, []( account_object& a )
       {
          a.withdraw_routes--;
       });
@@ -393,7 +393,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
    itr = wd_idx.upper_bound( boost::make_tuple( from_account.id, account_id_type() ) );
    uint16_t total_percent = 0;
 
-   while( itr->from_account == from_account.id && itr != wd_idx.end() )
+   while( itr != wd_idx.end() && itr->from_account == from_account.id )
    {
       total_percent += itr->percent;
       ++itr;
@@ -424,7 +424,7 @@ void account_witness_proxy_evaluator::do_apply( const account_witness_proxy_oper
       /// check for proxy loops and fail to update the proxy if it would create a loop
       auto cprox = &new_proxy;
       while( cprox->proxy.size() != 0 ) {
-         const auto next_proxy = db().get_account( cprox->proxy );
+         const auto& next_proxy = db().get_account( cprox->proxy );
          FC_ASSERT( proxy_chain.insert( next_proxy.get_id() ).second, "Attempt to create a proxy loop" );
          cprox = &next_proxy;
          FC_ASSERT( proxy_chain.size() <= MUSE_MAX_PROXY_RECURSION_DEPTH, "Proxy chain is too long" );
