@@ -27,7 +27,6 @@
 #include <boost/multi_index/hashed_index.hpp>
 
 #include <fc/git_revision.hpp>
-#include <fc/real128.hpp>
 #include <fc/io/fstream.hpp>
 #include <fc/io/json.hpp>
 #include <fc/io/stdio.hpp>
@@ -1127,18 +1126,17 @@ public:
       }FC_CAPTURE_AND_RETHROW( (asset_name)(description)(max_supply)(new_issuer)(broadcast) )
    }
    
-   annotated_signed_transaction issue_asset(string asset_name, string to_account, fc::real128 amount, bool broadcast)
+   annotated_signed_transaction issue_asset(string asset_name, string to_account, string amount, bool broadcast)
    {
       auto asset_obj = find_asset(asset_name);
-      auto to_account_obj = get_account(to_account);
       if (!asset_obj)
          FC_THROW("No asset with that symbol exists!");
+      get_account(to_account); // verify that it exists
       auto issuer = get_account_from_id(asset_obj->issuer);
       asset_issue_operation issue_op;
       issue_op.issuer = issuer->name;
-      uint64_t amount_i = (amount*asset::static_precision()).to_uint64();
-      issue_op.asset_to_issue = asset(amount_i, asset_obj->id);
-      issue_op.issue_to_account=to_account;
+      issue_op.asset_to_issue = asset::from_string( amount + std::string(" ") + std::string(asset_obj->id) );
+      issue_op.issue_to_account = to_account;
 
       signed_transaction tx;
       tx.operations.push_back(issue_op);
@@ -1147,20 +1145,17 @@ public:
       return sign_transaction(tx, broadcast);
    }
 
-   annotated_signed_transaction reserve_asset(string asset_name, string from_account, fc::real128 amount, bool broadcast)
+   annotated_signed_transaction reserve_asset(string asset_name, string from_account, string amount, bool broadcast)
    {
       auto asset_obj = find_asset(asset_name);
-      auto from_account_obj = get_account(from_account);
       if (!asset_obj)
          FC_THROW("No asset with that symbol exists!");
+      get_account(from_account); // verify that it exists
       auto issuer = get_account_from_id(asset_obj->issuer);
       
       asset_reserve_operation reserve_op;
       reserve_op.issuer = issuer->name;
-
-      uint64_t amount_i = (amount*asset::static_precision()).to_uint64();
-
-      reserve_op.amount_to_reserve = asset(amount_i, asset_obj->id);
+      reserve_op.amount_to_reserve = asset::from_string( amount + std::string(" ") + std::string(asset_obj->id) );
       reserve_op.payer = from_account;
 
       signed_transaction tx;
@@ -2611,12 +2606,12 @@ annotated_signed_transaction wallet_api::create_asset(string issuer, string asse
    return my->create_asset(issuer, asset_name, description, max_supply, broadcast); 
 }
 
-annotated_signed_transaction wallet_api::issue_asset(string asset_name, string to_account, fc::real128 amount, bool broadcast)
+annotated_signed_transaction wallet_api::issue_asset(string asset_name, string to_account, string amount, bool broadcast)
 {
    return my->issue_asset(asset_name, to_account, amount, broadcast);
 }
 
-annotated_signed_transaction wallet_api::reserve_asset(string asset_name, string from_account, fc::real128 amount, bool broadcast)
+annotated_signed_transaction wallet_api::reserve_asset(string asset_name, string from_account, string amount, bool broadcast)
 {
    return my->reserve_asset(asset_name, from_account, amount, broadcast);
 }

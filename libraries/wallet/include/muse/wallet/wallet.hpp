@@ -6,7 +6,6 @@
 
 #include <graphene/utilities/key_conversion.hpp>
 
-#include <fc/real128.hpp>
 #include <fc/crypto/base58.hpp>
 
 using namespace muse::app;
@@ -855,7 +854,7 @@ class wallet_api
        * @param amount Issued amount
        * @param broadcast Broadcast the transaction?
        */
-      annotated_signed_transaction issue_asset(string asset_name, string to_account, fc::real128 amount, bool broadcast);
+      annotated_signed_transaction issue_asset(string asset_name, string to_account, string amount, bool broadcast);
       
       /**
        * Reserve asset from an account
@@ -864,7 +863,7 @@ class wallet_api
        * @param amount Reserved amount
        * @param broadcast Broadcast the transaction?
        */
-      annotated_signed_transaction reserve_asset(string asset_name, string from_account, fc::real128 amount, bool broadcast);
+      annotated_signed_transaction reserve_asset(string asset_name, string from_account, string amount, bool broadcast);
 
       /**
        * Update an UIA.
