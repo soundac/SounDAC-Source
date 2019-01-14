@@ -26,7 +26,6 @@
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 
-#include <fc/container/deque.hpp>
 #include <fc/git_revision.hpp>
 #include <fc/real128.hpp>
 #include <fc/io/fstream.hpp>
