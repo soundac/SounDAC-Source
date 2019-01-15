@@ -240,6 +240,8 @@ BOOST_AUTO_TEST_CASE( get_accounts_test )
       cup.url = url;
       cup.side = content_update_operation::side_t::publisher;
       cup.new_threshold = 60;
+      cup.new_playing_reward = 0;
+      cup.new_publishers_share = 0;
 
       proposal_create_operation pco;
       pco.proposed_ops.emplace_back( cup );

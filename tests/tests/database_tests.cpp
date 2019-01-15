@@ -25,7 +25,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <muse/chain/database.hpp>
-
+#include <muse/chain/content_object.hpp>
 #include <muse/chain/streaming_platform_objects.hpp>
 
 #include <fc/crypto/digest.hpp>
@@ -61,6 +61,32 @@ BOOST_AUTO_TEST_CASE( undo_test )
       throw;
    }
 }
+
+/**
+ * Check that database modify() functors that throw do not get caught by boost, which will remove the object
+ */
+BOOST_AUTO_TEST_CASE(failed_modify_test)
+{ try {
+   database db;
+   // Create dummy object
+   const auto& obj = db.create<content_object>([](content_object& obj) {
+                     obj.manage_master = authority( 1, "test", 1 );
+                  });
+   content_id_type obj_id = obj.id;
+   BOOST_CHECK_EQUAL( 1, obj.manage_master.weight_threshold );
+
+   // Modify dummy object, check that changes stick
+   db.modify(obj, [](content_object& obj) {
+      obj.manage_master = authority( 2, "tester", 2 );
+   });
+   BOOST_CHECK_EQUAL( 2, obj_id(db).manage_master.weight_threshold );
+
+   // Throw exception when modifying object, check that object still exists after
+   BOOST_CHECK_THROW(db.modify(obj, [](content_object& obj) {
+      throw 5;
+   }), int);
+   BOOST_CHECK_NE((long)db.find_object(obj_id), (long)nullptr);
+} FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( merge_test )
 {

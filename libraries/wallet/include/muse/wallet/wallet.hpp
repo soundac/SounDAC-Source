@@ -6,7 +6,6 @@
 
 #include <graphene/utilities/key_conversion.hpp>
 
-#include <fc/real128.hpp>
 #include <fc/crypto/base58.hpp>
 
 using namespace muse::app;
@@ -227,8 +226,12 @@ class wallet_api
        */
       string                            get_private_key( public_key_type pubkey )const;
 
-      /**
-       *  @param role - active | owner | basic | memo
+      /** Generates public and private key pair using account name + role + password
+       *  as the seed string. Should be compatible with how the UI does it.
+       *  @param account account name to which the password belongs
+       *  @param role active | owner | basic | memo
+       *  @param password the actual password
+       *  @return the key pair (public,private)
        */
       pair<public_key_type,string>  get_private_key_from_password( string account, string role, string password )const;
 
@@ -840,10 +843,11 @@ class wallet_api
       uint64_t get_content_scoring( string content );
 
       /**
-       * Create a new UIA.
+       * Create a new UIA with 6 digits precision
+       * @param issuer Account name used for creating the asset
        * @param asset_name Unique asset name
        * @param description Description
-       * @param max_supply Maximum supply
+       * @param max_supply Maximum supply (in satoshis!)
        * @param broadcast Broadcast the transaction?
        */
       annotated_signed_transaction create_asset(string issuer, string asset_name, string description, uint64_t max_supply, bool broadcast);
@@ -855,7 +859,7 @@ class wallet_api
        * @param amount Issued amount
        * @param broadcast Broadcast the transaction?
        */
-      annotated_signed_transaction issue_asset(string asset_name, string to_account, fc::real128 amount, bool broadcast);
+      annotated_signed_transaction issue_asset(string asset_name, string to_account, string amount, bool broadcast);
       
       /**
        * Reserve asset from an account
@@ -864,7 +868,7 @@ class wallet_api
        * @param amount Reserved amount
        * @param broadcast Broadcast the transaction?
        */
-      annotated_signed_transaction reserve_asset(string asset_name, string from_account, fc::real128 amount, bool broadcast);
+      annotated_signed_transaction reserve_asset(string asset_name, string from_account, string amount, bool broadcast);
 
       /**
        * Update an UIA.
@@ -896,8 +900,9 @@ class wallet_api
       vector<content_object>  lookup_content(const string& start, uint32_t limit );
       
       /**
-       * Get content list, by namei, filtered by approver
-       * @param start Starting name
+       * Get content list, by approver, filtered by approver
+       * @param start Starting content id
+       * @param approver Account name that approved the content
        * @param limit Limit, less than 1000
        */
       vector<content_object>  lookup_content_by_approver(const string& start, const string& approver, uint32_t limit );
@@ -915,11 +920,10 @@ class wallet_api
       message_body try_decrypt_message( const message_object& mo );
 
       /**
-       * Vote on a comment to be paid MUSE
+       * Vote for content
        *
-       * @param voter The account voting
-       * @param author The author of the comment to be voted on
-       * @param url The permlink of the comment to be voted on. (author, permlink) is a unique pair
+       * @param voter The voting account
+       * @param url The ID of the comment to be voted on
        * @param weight The weight [-100,100] of the vote
        * @param broadcast true if you wish to broadcast the transaction
        */
@@ -1044,7 +1048,6 @@ class wallet_api
 
       /** Approve or disapprove a proposal.
        *
-       * @param fee_paying_account The account paying the fee for the op.
        * @param proposal_id The proposal to modify.
        * @param delta Members contain approvals to create or remove.  In JSON you can leave empty members undefined.
        * @param broadcast true if you wish to broadcast the transaction
@@ -1086,7 +1089,7 @@ FC_REFLECT( muse::wallet::wallet_data,
             (ws_password)
           )
 
-FC_REFLECT( muse::wallet::brain_key_info, (brain_priv_key)(wif_priv_key) (pub_key));
+FC_REFLECT( muse::wallet::brain_key_info, (brain_priv_key)(wif_priv_key) (pub_key))
 
 FC_REFLECT_DERIVED( muse::wallet::signed_block_with_info, (muse::chain::signed_block),
    (block_id)(signing_key)(transaction_ids) )
@@ -1218,4 +1221,4 @@ FC_REFLECT( muse::wallet::approval_delta,
         (key_approvals_to_add)
         (key_approvals_to_remove)
       )
-FC_REFLECT( muse::wallet::memo_data, (from)(to)(nonce)(check)(encrypted) );
+FC_REFLECT( muse::wallet::memo_data, (from)(to)(nonce)(check)(encrypted) )

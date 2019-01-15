@@ -1281,6 +1281,7 @@ BOOST_AUTO_TEST_CASE( proposals_with_mixed_authorities )
       cup.url = "ipfs://abcdefg1";
       cup.side = content_update_operation::side_t::master;
       cup.new_playing_reward = 500;
+      cup.new_publishers_share = 0;
       pc.proposed_ops.emplace_back( cup );
       pc.expiration_time = db.head_block_time() + fc::minutes(1);
       trx.operations.push_back( pc );
