@@ -3,6 +3,8 @@
  */
 #pragma once
 
+#define IS_TEST_NET
+
 #define MUSE_BLOCKCHAIN_VERSION              ( version(0, 3, 2) )
 #define MUSE_BLOCKCHAIN_HARDFORK_VERSION     ( hardfork_version( MUSE_BLOCKCHAIN_VERSION ) )
 
