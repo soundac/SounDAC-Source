@@ -852,11 +852,14 @@ void application::set_program_options(boost::program_options::options_descriptio
    default_plugins.push_back( "account_history" );
    std::string str_default_plugins = boost::algorithm::join( default_plugins, " " );
 
+   auto checkpoint_option = bpo::value<vector<string>>()->composing();
+   if( !DEFAULT_CHECKPOINT.empty() )
+      checkpoint_option = checkpoint_option->default_value(vector<string>(1,DEFAULT_CHECKPOINT), DEFAULT_CHECKPOINT);
    configuration_file_options.add_options()
          ("p2p-endpoint", bpo::value<string>(), "Endpoint for P2P node to listen on")
          ("p2p-max-connections", bpo::value<uint32_t>(), "Maxmimum number of incoming connections on P2P endpoint")
          ("seed-node,s", bpo::value<vector<string>>()->composing(), "P2P nodes to connect to on startup (may specify multiple times)")
-         ("checkpoint,c", bpo::value<vector<string>>()->composing()->default_value(vector<string>(1,DEFAULT_CHECKPOINT), DEFAULT_CHECKPOINT), "Pairs of [BLOCK_NUM,BLOCK_ID] that should be enforced as checkpoints.")
+         ("checkpoint,c", checkpoint_option, "Pairs of [BLOCK_NUM,BLOCK_ID] that should be enforced as checkpoints.")
          ("rpc-endpoint", bpo::value<string>()->implicit_value("127.0.0.1:8090"), "Endpoint for websocket RPC to listen on")
          ("rpc-tls-endpoint", bpo::value<string>()->implicit_value("127.0.0.1:8089"), "Endpoint for TLS websocket RPC to listen on")
          ("server-pem,p", bpo::value<string>()->implicit_value("server.pem"), "The TLS certificate file for this server")
