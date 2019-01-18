@@ -78,6 +78,7 @@ int main( int argc, char** argv )
          muse::chain::public_key_type pub_key = priv_key.get_public_key();
          mvo( "private_key", graphene::utilities::key_to_wif( priv_key ) )
             ( "public_key", std::string( pub_key ) )
+            ( "address", std::string( address( pub_key ) ) )
             ;
          if( comma )
             std::cout << ",\n";
