@@ -7,8 +7,9 @@
 #define MUSE_BLOCKCHAIN_HARDFORK_VERSION     ( hardfork_version( MUSE_BLOCKCHAIN_VERSION ) )
 
 #ifdef IS_TEST_NET // This is the muse test net mode. Some feature may behave differently
-#define MUSE_INIT_PRIVATE_KEY                (fc::ecc::private_key::regenerate(fc::sha256::hash(std::string("init_key"))))
-#define MUSE_INIT_PUBLIC_KEY_STR             (std::string( muse::chain::public_key_type(MUSE_INIT_PRIVATE_KEY.get_public_key()) ))
+//#define MUSE_INIT_PRIVATE_KEY                (fc::ecc::private_key::regenerate(fc::sha256::hash(std::string("init_key"))))
+//#define MUSE_INIT_PUBLIC_KEY_STR             (std::string( muse::chain::public_key_type(MUSE_INIT_PRIVATE_KEY.get_public_key()) ))
+#define MUSE_INIT_PUBLIC_KEY_STR             "TST5BigecKjvdcLHJ3ij8ufSWBWdYGiBA7KsGiuytrSGpi1MBYEW8"
 #define MUSE_CHAIN_ID                        (fc::sha256::hash("muse testnet"))
 #define BASE_SYMBOL                          "TEST"
 #define MUSE_ADDRESS_PREFIX                  "TST"
