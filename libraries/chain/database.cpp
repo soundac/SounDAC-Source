@@ -20,8 +20,6 @@
 #include <fc/smart_ref_impl.hpp>
 #include <fc/uint128.hpp>
 
-#include <fc/container/deque.hpp>
-
 #include <fc/io/fstream.hpp>
 
 #include <cstdint>
@@ -110,6 +108,9 @@ void database::open( const fc::path& data_dir, const genesis_state_type& initial
          version_file.write( db_version.c_str(), db_version.size() );
          version_file.close();
       }
+
+      genesis_json_hash = initial_allocation.json_hash;
+      ilog( "genesis.json hash is " + fc::string( genesis_json_hash ) );
 
       object_database::open(data_dir);
 
@@ -378,6 +379,11 @@ std::vector<block_id_type> database::get_block_ids_on_fork(block_id_type head_of
 chain_id_type database::get_chain_id() const
 {
    return MUSE_CHAIN_ID;
+}
+
+const fc::sha256& database::get_genesis_json_hash()const
+{
+   return genesis_json_hash;
 }
 
 const account_object& database::get_account( const string& name )const
@@ -1481,20 +1487,18 @@ void database::clear_streaming_platform_votes( const account_object& a )
 
 void database::update_owner_authority( const account_object& account, const authority& owner_authority )
 {
-   if( head_block_num() >= 3186477 ) // FIXME: needs to be removed, but usage must be HF-protected
+   const auto now = head_block_time();
+   create< owner_authority_history_object >( [&account,now]( owner_authority_history_object& hist )
    {
-      create< owner_authority_history_object >( [&]( owner_authority_history_object& hist )
-      {
-         hist.account = account.name;
-         hist.previous_owner_authority = account.owner;
-         hist.last_valid_time = head_block_time();
-      });
-   }
+      hist.account = account.name;
+      hist.previous_owner_authority = account.owner;
+      hist.last_valid_time = now;
+   });
 
-   modify( account, [&]( account_object& a )
+   modify( account, [&owner_authority,now]( account_object& a )
    {
       a.owner = owner_authority;
-      a.last_owner_update = head_block_time();
+      a.last_owner_update = now;
    });
 }
 
@@ -1784,17 +1788,6 @@ void database::pay_to_platform( streaming_platform_id_type platform, const asset
    auto vest_created = create_vesting( owner, vesting_muse );
    auto mbd_created = create_mbd( owner, mbd_muse );
    push_applied_operation(playing_reward_operation(pl.owner, url, mbd_created, vest_created ));
-}FC_LOG_AND_RETHROW() }
-
-
-void database::pay_to_curator(const content_object &co, account_id_type cur, const asset& pay)
-{try{
-   const auto& curator = get<account_object>(cur);
-   auto vesting_muse = asset(0, MUSE_SYMBOL);
-   auto mbd_muse     = pay - vesting_muse;
-   auto vest_created = create_vesting( curator, vesting_muse );
-   auto mbd_created = create_mbd( curator, mbd_muse );
-   push_applied_operation(curate_reward_operation( curator.name, co.url, mbd_created, vest_created ));
 }FC_LOG_AND_RETHROW() }
 
 asset database::pay_to_content(content_id_type content, asset payout, streaming_platform_id_type platform)
@@ -2120,7 +2113,10 @@ void database::initialize_indexes()
    add_index< primary_index< liquidity_reward_index > >();
    add_index< primary_index< limit_order_index > >();
    add_index< primary_index< escrow_index > >();
-   add_index< primary_index< content_index > >();
+   auto cti = add_index< primary_index< content_index > >();
+   cti->add_secondary_index<content_by_genre_index>();
+   cti->add_secondary_index<content_by_category_index>();
+
    add_index< primary_index< content_approve_index> >();
 
    //Implementation object indexes

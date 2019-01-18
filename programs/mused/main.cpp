@@ -22,6 +22,10 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
+#include <graphene/utilities/git_revision.hpp>
+#include <websocketpp/version.hpp>
+#include <boost/algorithm/string/replace.hpp>
+
 #include <iostream>
 #include <fstream>
 
@@ -47,29 +51,28 @@ int main(int argc, char** argv) {
    fc::oexception unhandled_exception;
    try {
 
+      std::cerr << "------------------------------------------------------\n\n";
 #ifdef IS_TEST_NET
-      std::cerr << "------------------------------------------------------\n\n";
       std::cerr << "            STARTING TEST NETWORK\n\n";
-      std::cerr << "------------------------------------------------------\n";
-      auto initminer_private_key = graphene::utilities::key_to_wif( MUSE_INIT_PRIVATE_KEY );
-      std::cerr << "initminer public key: " << MUSE_INIT_PUBLIC_KEY_STR << "\n";
-      std::cerr << "initminer private key: " << initminer_private_key << "\n";
-      std::cerr << "chain id: " << std::string(MUSE_CHAIN_ID) << "\n";
-      std::cerr << "------------------------------------------------------\n";
 #else
-      std::cerr << "------------------------------------------------------\n\n";
       std::cerr << "            STARTING MUSE NETWORK\n\n";
+#endif
       std::cerr << "------------------------------------------------------\n";
       std::cerr << "initminer public key: " << MUSE_INIT_PUBLIC_KEY_STR << "\n";
-      std::cerr << "chain id: " << std::string(MUSE_CHAIN_ID) << "\n";
-      std::cerr << "------------------------------------------------------\n";
+#ifdef MUSE_INIT_PRIVATE_KEY
+      auto initminer_private_key = graphene::utilities::key_to_wif( MUSE_INIT_PRIVATE_KEY );
+      std::cerr << "initminer private key: " << initminer_private_key << "\n";
 #endif
+      std::cerr << "chain id: " << std::string(MUSE_CHAIN_ID) << "\n";
+      std::cerr << "version: " << graphene::utilities::git_revision_description << "\n";
+      std::cerr << "------------------------------------------------------\n";
 
       bpo::options_description app_options("Muse Daemon");
       bpo::options_description cfg_options("Muse Daemon");
       app_options.add_options()
             ("help,h", "Print this help message and exit.")
             ("data-dir,d", bpo::value<boost::filesystem::path>()->default_value("witness_node_data_dir"), "Directory containing databases, configuration file, etc.")
+            ("version,v", "Display version information")
             ;
 
       bpo::variables_map options;
@@ -94,6 +97,17 @@ int main(int argc, char** argv) {
       if( options.count("help") )
       {
          std::cout << app_options << "\n";
+         return 0;
+      }
+
+      if( options.count("version") )
+      {
+         //std::cout << "Version: " << graphene::utilities::git_revision_description << "\n";
+         std::cout << "SHA: " << graphene::utilities::git_revision_sha << "\n";
+         std::cout << "Timestamp: " << fc::get_approximate_relative_time_string(fc::time_point_sec(graphene::utilities::git_revision_unix_timestamp)) << "\n";
+         std::cout << "SSL: " << OPENSSL_VERSION_TEXT << "\n";
+         std::cout << "Boost: " << boost::replace_all_copy(std::string(BOOST_LIB_VERSION), "_", ".") << "\n";
+         std::cout << "Websocket++: " << websocketpp::major_version << "." << websocketpp::minor_version << "." << websocketpp::patch_version << "\n";
          return 0;
       }
 
@@ -136,20 +150,22 @@ int main(int argc, char** argv) {
                out_cfg << "# " << od->description() << "\n";
             boost::any store;
             if( !od->semantic()->apply_default(store) )
-               out_cfg << "# " << od->long_name() << " = \n";
+               out_cfg << "# " << od->long_name() << " =";
             else {
                auto example = od->format_parameter();
+               out_cfg << od->long_name() << " = ";
                if( example.empty() )
                   // This is a boolean switch
-                  out_cfg << od->long_name() << " = " << "false\n";
-               else {
+                  out_cfg << "false";
+               else if( example.size() >= 7 )
+               {
                   // The string is formatted "arg (=<interesting part>)"
                   example.erase(0, 6);
                   example.erase(example.length()-1);
-                  out_cfg << od->long_name() << " = " << example << "\n";
+                  out_cfg << example;
                }
             }
-            out_cfg << "\n";
+            out_cfg << "\n\n";
          }
          write_default_logging_config_to_stream(out_cfg);
          out_cfg.close();

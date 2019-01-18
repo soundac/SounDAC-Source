@@ -90,6 +90,7 @@ struct genesis_state_type {
    uint64_t                                 initial_active_witnesses = 1;
    vector<initial_witness_type>             initial_witness_candidates;
    chain_id_type                            initial_chain_id;
+   fc::sha256                               json_hash;
    /**
     * Get the chain_id corresponding to this genesis state.
     *

@@ -105,7 +105,8 @@ namespace muse { namespace chain {
          const signed_transaction&  get_recent_transaction( const transaction_id_type& trx_id )const;
          std::vector<block_id_type> get_block_ids_on_fork(block_id_type head_of_fork) const;
 
-         chain_id_type             get_chain_id()const;
+         chain_id_type              get_chain_id()const;
+         const fc::sha256&          get_genesis_json_hash()const;
 
          const witness_object* find_witness( const string& name )const;
          const streaming_platform_object* find_streaming_platform( const string& name )const;
@@ -438,7 +439,6 @@ namespace muse { namespace chain {
          asset get_vesting_reward()const;
 
          void pay_to_platform( streaming_platform_id_type platform, const asset& payout, const string& url );
-         void pay_to_curator(const content_object &co, account_id_type cur, const asset& pay);
          ///@}
 
          vector< signed_transaction >  _pending_tx;
@@ -466,6 +466,8 @@ namespace muse { namespace chain {
          flat_map<uint32_t,block_id_type>  _checkpoints;
 
          node_property_object              _node_property_object;
+
+         fc::sha256                        genesis_json_hash;
 
          /**
           * Whether database is successfully opened or not.

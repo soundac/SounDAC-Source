@@ -94,17 +94,19 @@ namespace detail {
          vector<string> seeds;
          if( _options->count("seed-node") )
             seeds = _options->at("seed-node").as<vector<string>>();
-#ifndef IS_TEST_NET
-#ifndef IS_MUSE_TEST
          else
          {
+#ifdef IS_TEST_NET
+             seeds.push_back("muse-test.seeds.quisquis.de:33332"); // pc's DNS seeder
+#else
+#ifndef IS_MUSE_TEST
              seeds.push_back("138.197.68.175:33333"); // main seed
              seeds.push_back("muse.seeds.quisquis.de:33333"); // pc's DNS seeder, http://seeds.quisquis.de/muse.html
              seeds.push_back("94.130.250.18:33333"); // educatedwarrior
              seeds.push_back("seed.muse.dgazek.tk:33333"); // witness dgazek
+#endif
+#endif
          }
-#endif
-#endif
          std::set<fc::ip::endpoint> seen;
          for( const string& endpoint_string : seeds )
          {
@@ -253,8 +255,11 @@ namespace detail {
             if( _options->count("genesis-json") )
             {
                fc::path genesis_path(_options->at("genesis-json").as<boost::filesystem::path>());
-               auto genesis = fc::json::from_file( genesis_path ).as<genesis_state_type>( 20 );
+               std::string genesis_json;
+               read_file_contents( genesis_path, genesis_json );
+               auto genesis = fc::json::from_string( genesis_json ).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( genesis_json );
                return genesis;
 
             } else {
@@ -262,6 +267,7 @@ namespace detail {
                muse::egenesis::compute_egenesis_json(egenesis_json);
                auto genesis = fc::json::from_string(egenesis_json).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( egenesis_json );
                return genesis;
             }
          };
@@ -768,6 +774,11 @@ namespace detail {
          return _chain_db->head_block_id();
       }
 
+      virtual const fc::sha256& get_genesis_hash()const override
+      {
+         return _chain_db->get_genesis_json_hash();
+      }
+
       virtual uint32_t estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const override
       {
          return 0; // there are no forks in graphene
@@ -822,7 +833,11 @@ application::~application()
    }
 }
 
-static const string DEFAULT_CHECKPOINT = "[3900000,\"003b8260970ee1d4e97f7a18aac40d51d0882365\"]";
+#ifdef IS_TEST_NET
+static const string DEFAULT_CHECKPOINT = "";
+#else
+static const string DEFAULT_CHECKPOINT = "[14000000,\"00d59f8062cc96d8e6140129bec3fc991dfbcefe\"]";
+#endif
 
 void application::set_program_options(boost::program_options::options_description& command_line_options,
                                       boost::program_options::options_description& configuration_file_options) const
@@ -837,11 +852,14 @@ void application::set_program_options(boost::program_options::options_descriptio
    default_plugins.push_back( "account_history" );
    std::string str_default_plugins = boost::algorithm::join( default_plugins, " " );
 
+   auto checkpoint_option = bpo::value<vector<string>>()->composing();
+   if( !DEFAULT_CHECKPOINT.empty() )
+      checkpoint_option = checkpoint_option->default_value(vector<string>(1,DEFAULT_CHECKPOINT), DEFAULT_CHECKPOINT);
    configuration_file_options.add_options()
          ("p2p-endpoint", bpo::value<string>(), "Endpoint for P2P node to listen on")
          ("p2p-max-connections", bpo::value<uint32_t>(), "Maxmimum number of incoming connections on P2P endpoint")
          ("seed-node,s", bpo::value<vector<string>>()->composing(), "P2P nodes to connect to on startup (may specify multiple times)")
-         ("checkpoint,c", bpo::value<vector<string>>()->composing()->default_value(vector<string>(1,DEFAULT_CHECKPOINT), DEFAULT_CHECKPOINT), "Pairs of [BLOCK_NUM,BLOCK_ID] that should be enforced as checkpoints.")
+         ("checkpoint,c", checkpoint_option, "Pairs of [BLOCK_NUM,BLOCK_ID] that should be enforced as checkpoints.")
          ("rpc-endpoint", bpo::value<string>()->implicit_value("127.0.0.1:8090"), "Endpoint for websocket RPC to listen on")
          ("rpc-tls-endpoint", bpo::value<string>()->implicit_value("127.0.0.1:8089"), "Endpoint for TLS websocket RPC to listen on")
          ("server-pem,p", bpo::value<string>()->implicit_value("server.pem"), "The TLS certificate file for this server")

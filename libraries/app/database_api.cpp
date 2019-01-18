@@ -70,10 +70,15 @@ class database_api_impl : public std::enable_shared_from_this<database_api_impl>
       set<string> lookup_streaming_platform_accounts(const string& lower_bound_name, uint32_t limit)const;
       bool is_streaming_platform(string straming_platform)const;
       //content
-      vector<report_object> get_reports_for_account(string consumer)const; 
+      vector<report_object> get_reports_for_account(string consumer)const;
       vector<content_object> get_content_by_uploader(string author)const;
       optional<content_object>    get_content_by_url(string url)const;
-      vector<content_object>  lookup_content(const string& start, uint32_t limit )const;
+      vector<content_object> lookup_content(const string& start, uint32_t limit )const;
+      vector<content_object> list_content_by_latest( const content_id_type start, uint16_t limit )const;
+      vector<content_object> list_content_by_genre( uint32_t genre, const content_id_type start, uint16_t limit )const;
+      vector<content_object> list_content_by_category( const string& category, const content_id_type bound, uint16_t limit )const;
+      vector<content_object> list_content_by_uploader( const string& uploader, const object_id_type bound, uint16_t limit )const;
+
       //scoring
       uint64_t get_account_scoring( string account );
       uint64_t get_content_scoring( string content );
@@ -392,7 +397,7 @@ vector< extended_account > database_api_impl::get_accounts( const vector< string
       auto itr = idx.find( name );
       if ( itr == idx.end() ) continue;
 
-      results.push_back( *itr );
+      results.push_back( extended_account( *itr ) );
       results.back().muse_power = itr->vesting_shares * vesting_price;
 
       auto vitr = vidx.lower_bound( boost::make_tuple( itr->get_id(), witness_id_type() ) );
@@ -775,10 +780,10 @@ vector<content_object> database_api::get_content_by_uploader(string author)const
 
 vector<content_object> database_api_impl::get_content_by_uploader(string uploader)const
 {
-   const auto& idx= _db.get_index_type<content_index>().indices().get< by_uploader_url >();
+   const auto& idx= _db.get_index_type<content_index>().indices().get< by_uploader >();
    vector <content_object> result;
     
-   auto itr = idx.lower_bound( std::make_tuple( uploader, "") );
+   auto itr = idx.lower_bound( std::make_tuple( uploader, content_id_type(-1) ) );
    while( itr != idx.end() && itr->uploader == uploader && result.size() < 1000 )
    {
       result.push_back (*itr);
@@ -824,6 +829,116 @@ vector<content_object>  database_api_impl::lookup_content(const string& start, u
    return result;
 }
 
+vector<content_object> database_api::list_content_by_latest( const string& start, uint16_t limit )const
+{
+   if( start.empty() )
+      return my->list_content_by_latest( content_id_type(), limit );
+   return my->list_content_by_latest( fc::variant(start, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_latest( const content_id_type start, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type<content_index>().indices().get<by_id>();
+   auto itr = (start.instance.value > 0 ? idx.upper_bound( start ) : idx.end());
+   if( itr == idx.begin() ) return result;
+   if( start.instance.value > 0 )
+   {
+      --itr;
+      if( itr->id != start ) itr++;
+   }
+   while( itr != idx.begin() && result.size() < limit )
+      result.push_back( *--itr );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_genre( uint32_t genre, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_genre( genre, content_id_type(), limit );
+   return my->list_content_by_genre( genre, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_genre( uint32_t genre, const content_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type< primary_index< content_index > >();
+   const content_by_genre_index& by_genre = idx.get_secondary_index<muse::chain::content_by_genre_index>();
+   const set< content_id_type > ids = by_genre.find_by_genre( genre );
+   auto itr = (bound.instance.value > 0 ? ids.upper_bound( bound ) : ids.end());
+   if( itr == ids.begin() ) return result;
+   if( bound.instance.value > 0 )
+   {
+      --itr;
+      if( *itr != bound ) itr++;
+   }
+   while( itr != ids.begin() && result.size() < limit )
+      result.push_back( (*--itr)(_db) );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_category( const string& category, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_category( category, content_id_type(), limit );
+   return my->list_content_by_category( category, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_category( const string& category, const content_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type< primary_index< content_index > >();
+   const content_by_category_index& by_category = idx.get_secondary_index<muse::chain::content_by_category_index>();
+   const set< content_id_type > ids = by_category.find_by_category( category );
+   auto itr = (bound.instance.value > 0 ? ids.upper_bound( bound ) : ids.end());
+   if( itr == ids.begin() ) return result;
+   if( bound.instance.value > 0 )
+   {
+      --itr;
+      if( *itr != bound ) itr++;
+   }
+   while( itr != ids.begin() && result.size() < limit )
+      result.push_back( (*--itr)(_db) );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_uploader( const string& uploader, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_uploader( uploader, content_id_type(), limit );
+   return my->list_content_by_uploader( uploader, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_uploader( const string& uploader, const object_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type<content_index>().indices().get<by_uploader>();
+   auto itr = idx.lower_bound( boost::make_tuple( uploader, bound.instance() > 0 ? bound : object_id_type(content_id_type((1ULL<<48)-1)) ) );
+   if( itr == idx.end() ) return result;
+   if( bound.instance() > 0 )
+   {
+      if( itr->id == bound ) itr++;
+   }
+   while( itr != idx.end() && itr->uploader == uploader && result.size() < limit )
+      result.push_back( *itr++ );
+
+   return result;
+}
 
 //////////////////////////////////////////////////////////////////////
 //                                                                  //
@@ -841,7 +956,7 @@ vector<extended_limit_order> database_api::get_open_orders( string owner )const 
    const auto& idx = my->_db.get_index_type<limit_order_index>().indices().get<by_account>();
    auto itr = idx.lower_bound( owner );
    while( itr != idx.end() && itr->seller == owner ) {
-      result.push_back( *itr );
+      result.push_back( extended_limit_order( *itr ) );
 
       if( itr->sell_price.base.asset_id == MUSE_SYMBOL )
          result.back().real_price = (result.back().sell_price).to_real();

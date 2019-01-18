@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>SOUNDAC Testnet Faucet</title>
+	</head>
+	<body>
+		<h1>SOUNDAC Testnet Faucet</h1>
+		<p>Enter desired account name and your public(!) keys below, then press Submit.</p>
+		<form method="POST" action="http://81.7.11.13:1380/cgi-bin/faucet.cgi">
+		<ul>
+			<li>Name: <input type="text" size="20" name="name"></li>
+			<li>Owner key: <input type="text" size="60" name="owner"></li>
+			<li>Active key: <input type="text" size="60" name="active"></li>
+			<li>Basic key: <input type="text" size="60" name="basic"></li>
+			<li>Memo key: <input type="text" size="60" name="memo"></li>
+		</ul>
+		<input type="submit" value="Submit">
+		</form>
+	</body>
+</html>

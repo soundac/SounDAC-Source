@@ -9,8 +9,9 @@
 #define MUSE_BLOCKCHAIN_HARDFORK_VERSION     ( hardfork_version( MUSE_BLOCKCHAIN_VERSION ) )
 
 #ifdef IS_TEST_NET // This is the muse test net mode. Some feature may behave differently
-#define MUSE_INIT_PRIVATE_KEY                (fc::ecc::private_key::regenerate(fc::sha256::hash(std::string("init_key"))))
-#define MUSE_INIT_PUBLIC_KEY_STR             (std::string( muse::chain::public_key_type(MUSE_INIT_PRIVATE_KEY.get_public_key()) ))
+//#define MUSE_INIT_PRIVATE_KEY                (fc::ecc::private_key::regenerate(fc::sha256::hash(std::string("init_key"))))
+//#define MUSE_INIT_PUBLIC_KEY_STR             (std::string( muse::chain::public_key_type(MUSE_INIT_PRIVATE_KEY.get_public_key()) ))
+#define MUSE_INIT_PUBLIC_KEY_STR             "TST5BigecKjvdcLHJ3ij8ufSWBWdYGiBA7KsGiuytrSGpi1MBYEW8"
 #define MUSE_CHAIN_ID                        (fc::sha256::hash("muse testnet"))
 #define BASE_SYMBOL                          "TEST"
 #define MUSE_ADDRESS_PREFIX                  "TST"
@@ -25,7 +26,6 @@
 #define MUSE_OWNER_AUTH_RECOVERY_PERIOD                  fc::seconds(60)
 #define MUSE_ACCOUNT_RECOVERY_REQUEST_EXPIRATION_PERIOD  fc::seconds(12)
 #define MUSE_OWNER_UPDATE_LIMIT                          fc::seconds(0)
-#define MUSE_OWNER_AUTH_HISTORY_TRACKING_START_BLOCK_NUM 1
 
 #elif defined(IS_MUSE_TEST) // This is MUSE's test mode. It's the same behavior as prod, but with different symbols, chain ID, prefixes to make a clear distinction from the prod network. Some minor settings may be adjusted to ease timeouts, limits, etc
 
@@ -47,7 +47,6 @@
 #define MUSE_OWNER_AUTH_RECOVERY_PERIOD                  fc::days(30)
 #define MUSE_ACCOUNT_RECOVERY_REQUEST_EXPIRATION_PERIOD  fc::days(1)
 #define MUSE_OWNER_UPDATE_LIMIT                          fc::minutes(60)
-#define MUSE_OWNER_AUTH_HISTORY_TRACKING_START_BLOCK_NUM 3186477
 
 #else // This is MUSE's PROD mode.
 

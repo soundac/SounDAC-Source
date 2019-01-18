@@ -3,7 +3,6 @@
 #include <muse/chain/base_objects.hpp>
 
 #ifndef IS_LOW_MEM
-#include <diff_match_patch.h>
 #include <boost/locale/encoding_utf.hpp>
 
 using boost::locale::conv::utf_to_utf;
@@ -62,14 +61,8 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
 {
    if ( o.json_metadata.size() > 0 )
    {
-      if( db().has_hardfork( MUSE_HARDFORK_0_3 ) )
-         FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
-      else
-         FC_ASSERT( fc::json::is_valid(o.json_metadata, fc::json::broken_nul_parser), "JSON Metadata not valid JSON" );
+      FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
-
-   if( db().has_hardfork( MUSE_HARDFORK_0_3 ) )
-      o.basic.validate();
 
    const auto& creator = db().get_account( o.creator );
 
@@ -116,16 +109,10 @@ void account_update_evaluator::do_apply( const account_update_operation& o )
 {
    if ( o.json_metadata.size() > 0 )
    {
-      if( db().has_hardfork( MUSE_HARDFORK_0_3 ) )
-         FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
-      else
-         FC_ASSERT( fc::json::is_valid(o.json_metadata, fc::json::broken_nul_parser), "JSON Metadata not valid JSON" );
+      FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
 
    FC_ASSERT( o.account != MUSE_TEMP_ACCOUNT );
-
-   if( db().has_hardfork( MUSE_HARDFORK_0_3 ) && o.basic )
-      o.basic->validate();
 
    const auto& account = db().get_account( o.account );
 
@@ -253,7 +240,6 @@ void transfer_evaluator::do_apply( const transfer_operation& o )
       db().adjust_balance( to_account, o.amount );
 
    } else {
-      /// TODO: this line can be removed after hard fork
       FC_ASSERT( false , "transferring of Vestings (VEST) is not allowed." );
 #if 0
       /** allow transfer of vesting balance if the full balance is transferred to a new account
@@ -379,7 +365,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
          wvdo.auto_vest = o.auto_vest;
       });
 
-      db().modify( from_account, [&]( account_object& a )
+      db().modify( from_account, []( account_object& a )
       {
          a.withdraw_routes++;
       });
@@ -388,7 +374,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
    {
       db().remove( *itr );
 
-      db().modify( from_account, [&]( account_object& a )
+      db().modify( from_account, []( account_object& a )
       {
          a.withdraw_routes--;
       });
@@ -407,7 +393,7 @@ void set_withdraw_vesting_route_evaluator::do_apply( const set_withdraw_vesting_
    itr = wd_idx.upper_bound( boost::make_tuple( from_account.id, account_id_type() ) );
    uint16_t total_percent = 0;
 
-   while( itr->from_account == from_account.id && itr != wd_idx.end() )
+   while( itr != wd_idx.end() && itr->from_account == from_account.id )
    {
       total_percent += itr->percent;
       ++itr;
@@ -438,7 +424,7 @@ void account_witness_proxy_evaluator::do_apply( const account_witness_proxy_oper
       /// check for proxy loops and fail to update the proxy if it would create a loop
       auto cprox = &new_proxy;
       while( cprox->proxy.size() != 0 ) {
-         const auto next_proxy = db().get_account( cprox->proxy );
+         const auto& next_proxy = db().get_account( cprox->proxy );
          FC_ASSERT( proxy_chain.insert( next_proxy.get_id() ).second, "Attempt to create a proxy loop" );
          cprox = &next_proxy;
          FC_ASSERT( proxy_chain.size() <= MUSE_MAX_PROXY_RECURSION_DEPTH, "Proxy chain is too long" );
@@ -477,7 +463,7 @@ void account_witness_vote_evaluator::do_apply( const account_witness_vote_operat
    if( itr == by_account_witness_idx.end() ) {
       FC_ASSERT( o.approve, "vote doesn't exist, user must be indicate a desire to approve witness" );
 
-      FC_ASSERT( voter.witnesses_voted_for < MUSE_MAX_ACCOUNT_WITNESS_VOTES, "account has voted for too many witnesses" ); // TODO: Remove after hardfork 2
+      FC_ASSERT( voter.witnesses_voted_for < MUSE_MAX_ACCOUNT_WITNESS_VOTES, "account has voted for too many witnesses" );
 
       db().create<witness_vote_object>( [&]( witness_vote_object& v ) {
           v.witness = witness.id;
@@ -510,10 +496,7 @@ void custom_json_evaluator::do_apply( const custom_json_operation& o )
 {
    if ( o.json.size() > 0 )
    {
-      if( db().has_hardfork( MUSE_HARDFORK_0_3 ) )
-         FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
-      else
-         FC_ASSERT( fc::json::is_valid(o.json, fc::json::broken_nul_parser), "JSON data not valid JSON" );
+      FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
    }
 
    for( const auto& auth : o.required_basic_auths )

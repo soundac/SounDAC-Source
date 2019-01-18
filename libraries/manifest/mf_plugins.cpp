@@ -4,6 +4,7 @@
 #include <muse/manifest/plugins.hpp>
 #include <mf_internal_plugins.inc>
 #include <mf_external_plugins.inc>
+#include <functional>
 
 #define MUSE_DECLARE_PLUGIN_CREATOR( r, data, x ) \
    std::shared_ptr< muse::app::abstract_plugin > BOOST_PP_CAT( create_, BOOST_PP_CAT( x,  _plugin ) )();
