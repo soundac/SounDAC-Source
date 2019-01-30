@@ -22,16 +22,24 @@ RUN \
       cmake \
       git \
       libbz2-dev \
-      libreadline-dev \
-      libboost-all-dev \
       libcurl4-openssl-dev \
       libssl-dev \
       libncurses-dev \
+      libboost-thread-dev \
+      libboost-iostreams-dev \
+      libboost-date-time-dev \
+      libboost-system-dev \
+      libboost-filesystem-dev \
+      libboost-program-options-dev \
+      libboost-chrono-dev \
+      libboost-test-dev \
+      libboost-context-dev \
+      libboost-regex-dev \
+      libboost-coroutine-dev \
       doxygen \
       ca-certificates \
+      fish \
     && \
-    apt-get update -y && \
-    apt-get install -y fish && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -51,8 +59,8 @@ RUN \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         . && \
-    make mused cli_wallet && \
-    install -s programs/mused/mused programs/cli_wallet/cli_wallet /usr/local/bin && \
+    make mused cli_wallet get_dev_key && \
+    install -s programs/mused/mused programs/cli_wallet/cli_wallet programs/util/get_dev_key /usr/local/bin && \
     install -d /etc/SounDAC && \
     install -m 0644 Docker/config.ini /etc/SounDAC/ && \
     install -m 0755 Docker/entrypoint.sh / && \
@@ -84,4 +92,5 @@ COPY --from=build /entrypoint.sh /entrypoint.sh
 COPY --from=build /etc/SounDAC/config.ini /etc/SounDAC/config.ini
 COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
 COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
+COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
 COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
