@@ -5,14 +5,12 @@ cache: ccache
 git:
   depth: 1
 
-dist: trusty
+dist: xenial
 
 sudo: true
 
 install:
- - echo "deb http://de.archive.ubuntu.com/ubuntu xenial main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
- - sudo apt-get update
- - sudo apt-get install --allow-unauthenticated g++ libboost-all-dev cmake libreadline-dev libssl-dev autoconf parallel ccache
+ - sudo apt-get install --allow-unauthenticated libboost-thread-dev libboost-iostreams-dev libboost-date-time-dev libboost-system-dev libboost-filesystem-dev libboost-program-options-dev libboost-chrono-dev libboost-test-dev libboost-context-dev libboost-regex-dev libboost-coroutine-dev cmake parallel
 
 addons:
   sonarcloud:
@@ -27,10 +25,20 @@ env:
     - CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,time_macros
 
 script:
- - sed -i '/subdirectory.*tests/d' libraries/fc/CMakeLists.txt
- - cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage -DBoost_USE_STATIC_LIBS=OFF -DCMAKE_CXX_OUTPUT_EXTENSION_REPLACE=ON .
- - 'which build-wrapper-linux-x86-64 && build-wrapper-linux-x86-64 --out-dir bw-output make -j 2 || make -j 2'
- - tests/chain_test  2>&1 | cat
- - tests/plugin_test 2>&1 | cat
- - 'find libraries/[acdemnpuw]*/CMakeFiles/*.dir programs/[cjmsu]*/CMakeFiles/*.dir -type d | while read d; do gcov -o "$d" "${d/CMakeFiles*.dir/./}"/*.cpp; done >/dev/null'
- - 'which sonar-scanner && sonar-scanner || true'
+ - programs/build_helpers/buildstep -s 2900
+ - ccache -s
+ - programs/build_helpers/buildstep Prepare 1 "sed -i '/tests/d' libraries/fc/CMakeLists.txt"
+ - programs/build_helpers/buildstep cmake 5 "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage -DBoost_USE_STATIC_LIBS=OFF -DCMAKE_CXX_OUTPUT_EXTENSION_REPLACE=ON ."
+ - programs/build_helpers/buildstep make.cli_wallet 1000 "programs/build_helpers/make_with_sonar bw-output -j 2 cli_wallet"
+ - programs/build_helpers/buildstep make.mused 400 "programs/build_helpers/make_with_sonar bw-output -j 2 mused"
+ - programs/build_helpers/buildstep make.serializer 25 "programs/build_helpers/make_with_sonar bw-output -j 2 js_operation_serializer"
+ - programs/build_helpers/buildstep make.get_dev_key 10 "programs/build_helpers/make_with_sonar bw-output -j 2 get_dev_key"
+ - programs/build_helpers/buildstep make.chain_test 300 "programs/build_helpers/make_with_sonar bw-output -j 2 chain_test"
+ - programs/build_helpers/buildstep make.plugin_test 120 "programs/build_helpers/make_with_sonar bw-output -j 2 plugin_test"
+ - set -o pipefail
+ - programs/build_helpers/buildstep run.chain_test 400 "libraries/fc/tests/run-parallel-tests.sh tests/chain_test 2>&1"
+ - programs/build_helpers/buildstep run.plugin_test 30 "libraries/fc/tests/run-parallel-tests.sh tests/plugin_test 2>&1"
+ - programs/build_helpers/buildstep prepare.sonar 10 'find libraries/[acdemnpuw]*/CMakeFiles/*.dir programs/[cjmsu]*/CMakeFiles/*.dir -type d | while read d; do gcov -o "$d" "${d/CMakeFiles*.dir/./}"/*.cpp; done >/dev/null'
+ - programs/build_helpers/buildstep run.sonar 100 "which sonar-scanner && sonar-scanner || true"
+ - programs/build_helpers/buildstep end 0
+ - ccache -s
