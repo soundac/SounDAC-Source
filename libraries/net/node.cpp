@@ -394,6 +394,7 @@ namespace graphene { namespace net { namespace detail {
       fc::time_point_sec get_block_time(const item_hash_t& block_id) override;
       fc::time_point_sec get_blockchain_now() override;
       item_hash_t get_head_block_id() const override;
+      const fc::sha256& get_genesis_hash() const override;
       uint32_t estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const override;
       void error_encountered(const std::string& message, const fc::oexception& error) override;
     };
@@ -822,7 +823,7 @@ namespace graphene { namespace net { namespace detail {
       _maximum_blocks_per_peer_during_syncing(GRAPHENE_NET_MAX_BLOCKS_PER_PEER_DURING_SYNCING)
     {
       _rate_limiter.set_actual_rate_time_constant(fc::seconds(2));
-      fc::rand_pseudo_bytes(&_node_id.data[0], (int)_node_id.size());
+      fc::rand_bytes(&_node_id.data[0], (int)_node_id.size());
     }
 
     node_impl::~node_impl()
@@ -1858,7 +1859,7 @@ namespace graphene { namespace net { namespace detail {
       if (!_hard_fork_block_numbers.empty())
         user_data["last_known_fork_block_number"] = _hard_fork_block_numbers.back();
 
-      user_data["chain_id"] = MUSE_CHAIN_ID;
+      user_data["genesis_hash"] = fc::variant( _delegate->get_genesis_hash(), 2 );
 
       return user_data;
     }
@@ -1882,6 +1883,8 @@ namespace graphene { namespace net { namespace detail {
         originating_peer->node_id = user_data["node_id"].as<node_id_t>(1);
       if (user_data.contains("last_known_fork_block_number"))
         originating_peer->last_known_fork_block_number = user_data["last_known_fork_block_number"].as<uint32_t>(1);
+      if (user_data.contains("genesis_hash"))
+         originating_peer->genesis_hash = user_data["genesis_hash"].as<fc::sha256>(2);
     }
 
     void node_impl::on_hello_message( peer_connection* originating_peer, const hello_message& hello_message_received )
@@ -1942,12 +1945,18 @@ namespace graphene { namespace net { namespace detail {
           disconnect_from_peer( originating_peer, "Invalid signature in hello message" );
           return;
         }
-        if (hello_message_received.chain_id != MUSE_CHAIN_ID)
+        if (hello_message_received.chain_id != MUSE_CHAIN_ID
+               || ( originating_peer->genesis_hash.valid()
+                    && *originating_peer->genesis_hash != _delegate->get_genesis_hash() ) )
         {
           wlog("Received hello message from peer on a different chain: ${message}", ("message", hello_message_received));
           std::ostringstream rejection_message;
-          rejection_message << "You're on a different chain than I am.  I'm on " << MUSE_CHAIN_ID.str() <<
-                               " and you're on " << hello_message_received.chain_id.str(); 
+          if( hello_message_received.chain_id != MUSE_CHAIN_ID )
+             rejection_message << "You're on a different chain than I am.  I'm on " << MUSE_CHAIN_ID.str()
+                               << " and you're on " << hello_message_received.chain_id.str();
+          else // must be genesis hash then
+             rejection_message << "You're on a different genesis than I am.  I'm on " << _delegate->get_genesis_hash().str()
+                               << " and you're on " << originating_peer->genesis_hash->str();
           connection_rejected_message connection_rejected(_user_agent_string, core_protocol_version,
                 originating_peer->get_socket().remote_endpoint(),
                 rejection_reason_code::different_chain,
@@ -5526,6 +5535,11 @@ namespace graphene { namespace net { namespace detail {
     item_hash_t statistics_gathering_node_delegate_wrapper::get_head_block_id() const
     {
       INVOKE_AND_COLLECT_STATISTICS(get_head_block_id);
+    }
+
+    const fc::sha256& statistics_gathering_node_delegate_wrapper::get_genesis_hash()const
+    {
+       return _node_delegate->get_genesis_hash();
     }
 
     uint32_t statistics_gathering_node_delegate_wrapper::estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const

@@ -20,8 +20,6 @@
 #include <fc/smart_ref_impl.hpp>
 #include <fc/uint128.hpp>
 
-#include <fc/container/deque.hpp>
-
 #include <fc/io/fstream.hpp>
 
 #include <cstdint>
@@ -110,6 +108,9 @@ void database::open( const fc::path& data_dir, const genesis_state_type& initial
          version_file.write( db_version.c_str(), db_version.size() );
          version_file.close();
       }
+
+      genesis_json_hash = initial_allocation.json_hash;
+      ilog( "genesis.json hash is " + fc::string( genesis_json_hash ) );
 
       object_database::open(data_dir);
 
@@ -380,6 +381,11 @@ chain_id_type database::get_chain_id() const
    return MUSE_CHAIN_ID;
 }
 
+const fc::sha256& database::get_genesis_json_hash()const
+{
+   return genesis_json_hash;
+}
+
 const account_object& database::get_account( const string& name )const
 {
    const auto& accounts_by_name = get_index_type<account_index>().indices().get<by_name>();
@@ -620,17 +626,20 @@ bool database::_push_block(const signed_block& new_block)
          //Only switch forks if new_head is actually higher than head
          if( new_head->data.block_num() > head_block_num() )
          {
-            ilog( "Switching to fork: ${id}", ("id",new_head->data.id()) );
+            wlog( "Switching to fork: ${id}", ("id",new_head->data.id()) );
             auto branches = _fork_db.fetch_branch_from(new_head->data.id(), head_block_id());
 
             // pop blocks until we hit the forked block
             while( head_block_id() != branches.second.back()->data.previous )
+            {
+               ilog( "popping block #${n} ${id}", ("n",head_block_num())("id",head_block_id()) );
                pop_block();
+            }
 
             // push all blocks on the new fork
             for( auto ritr = branches.first.rbegin(); ritr != branches.first.rend(); ++ritr )
             {
-                dlog( "pushing blocks from fork ${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->data.id()) );
+                ilog( "pushing block from fork #${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->id) );
                 optional<fc::exception> except;
                 try
                 {
@@ -646,21 +655,27 @@ bool database::_push_block(const signed_block& new_block)
                    // remove the rest of branches.first from the fork_db, those blocks are invalid
                    while( ritr != branches.first.rend() )
                    {
-                      _fork_db.remove( (*ritr)->data.id() );
+                      ilog( "removing block from fork_db #${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->id) );
+                      _fork_db.remove( (*ritr)->id );
                       ++ritr;
                    }
                    _fork_db.set_head( branches.second.front() );
 
                    // pop all blocks from the bad fork
                    while( head_block_id() != branches.second.back()->data.previous )
-                      pop_block();
-
-                   // restore all blocks from the good fork
-                   for( auto ritr = branches.second.rbegin(); ritr != branches.second.rend(); ++ritr )
                    {
+                      ilog( "popping block #${n} ${id}", ("n",head_block_num())("id",head_block_id()) );
+                      pop_block();
+                   }
+
+                   ilog( "Switching back to fork: ${id}", ("id",branches.second.front()->data.id()) );
+                   // restore all blocks from the good fork
+                   for( auto ritr2 = branches.second.rbegin(); ritr2 != branches.second.rend(); ++ritr2 )
+                   {
+                      ilog( "pushing block #${n} ${id}", ("n",(*ritr2)->data.block_num())("id",(*ritr2)->id) );
                       auto session = _undo_db.start_undo_session();
-                      apply_block( (*ritr)->data, skip );
-                      _block_id_to_block.store( new_block.id(), (*ritr)->data );
+                      apply_block( (*ritr2)->data, skip );
+                      _block_id_to_block.store( (*ritr2)->id, (*ritr2)->data );
                       session.commit();
                    }
                    throw *except;

@@ -94,17 +94,19 @@ namespace detail {
          vector<string> seeds;
          if( _options->count("seed-node") )
             seeds = _options->at("seed-node").as<vector<string>>();
-#ifndef IS_TEST_NET
-#ifndef IS_MUSE_TEST
          else
          {
+#ifdef IS_TEST_NET
+             seeds.push_back("muse-test.seeds.quisquis.de:33332"); // pc's DNS seeder
+#else
+#ifndef IS_MUSE_TEST
              seeds.push_back("138.197.68.175:33333"); // main seed
              seeds.push_back("muse.seeds.quisquis.de:33333"); // pc's DNS seeder, http://seeds.quisquis.de/muse.html
              seeds.push_back("94.130.250.18:33333"); // educatedwarrior
              seeds.push_back("seed.muse.dgazek.tk:33333"); // witness dgazek
+#endif
+#endif
          }
-#endif
-#endif
          std::set<fc::ip::endpoint> seen;
          for( const string& endpoint_string : seeds )
          {
@@ -253,8 +255,11 @@ namespace detail {
             if( _options->count("genesis-json") )
             {
                fc::path genesis_path(_options->at("genesis-json").as<boost::filesystem::path>());
-               auto genesis = fc::json::from_file( genesis_path ).as<genesis_state_type>( 20 );
+               std::string genesis_json;
+               read_file_contents( genesis_path, genesis_json );
+               auto genesis = fc::json::from_string( genesis_json ).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( genesis_json );
                return genesis;
 
             } else {
@@ -262,6 +267,7 @@ namespace detail {
                muse::egenesis::compute_egenesis_json(egenesis_json);
                auto genesis = fc::json::from_string(egenesis_json).as<genesis_state_type>( 20 );
                genesis.initial_chain_id = MUSE_CHAIN_ID;
+               genesis.json_hash = fc::sha256::hash( egenesis_json );
                return genesis;
             }
          };
@@ -768,6 +774,11 @@ namespace detail {
          return _chain_db->head_block_id();
       }
 
+      virtual const fc::sha256& get_genesis_hash()const override
+      {
+         return _chain_db->get_genesis_json_hash();
+      }
+
       virtual uint32_t estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const override
       {
          return 0; // there are no forks in graphene
@@ -822,7 +833,11 @@ application::~application()
    }
 }
 
-static const string DEFAULT_CHECKPOINT = "[3900000,\"003b8260970ee1d4e97f7a18aac40d51d0882365\"]";
+#ifdef IS_TEST_NET
+static const string DEFAULT_CHECKPOINT = "";
+#else
+static const string DEFAULT_CHECKPOINT = "[14000000,\"00d59f8062cc96d8e6140129bec3fc991dfbcefe\"]";
+#endif
 
 void application::set_program_options(boost::program_options::options_description& command_line_options,
                                       boost::program_options::options_description& configuration_file_options) const

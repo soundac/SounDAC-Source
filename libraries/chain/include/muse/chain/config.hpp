@@ -10,28 +10,14 @@
 #define MUSE_INIT_PRIVATE_KEY                (fc::ecc::private_key::regenerate(fc::sha256::hash(std::string("init_key"))))
 #define MUSE_INIT_PUBLIC_KEY_STR             (std::string( muse::chain::public_key_type(MUSE_INIT_PRIVATE_KEY.get_public_key()) ))
 #define MUSE_CHAIN_ID                        (fc::sha256::hash("muse testnet"))
-/*
-#define VESTS_SYMBOL  (uint64_t(6) | (uint64_t('V') << 8) | (uint64_t('E') << 16) | (uint64_t('S') << 24) | (uint64_t('T') << 32) | (uint64_t('S') << 40)) 
-#define MUSE_SYMBOL  (uint64_t(3) | (uint64_t('T') << 8) | (uint64_t('E') << 16) | (uint64_t('S') << 24) | (uint64_t('T') << 32) | (uint64_t('S') << 40)) 
-#define MBD_SYMBOL    (uint64_t(3) | (uint64_t('T') << 8) | (uint64_t('B') << 16) | (uint64_t('D') << 24) ) 
-#define STMD_SYMBOL   (uint64_t(3) | (uint64_t('T') << 8) | (uint64_t('S') << 16) | (uint64_t('T') << 24) | (uint64_t('D') << 32) ) 
-#define NULL_SYMBOL  (uint64_t(3) )
-*/
 #define BASE_SYMBOL                          "TEST"
 #define MUSE_ADDRESS_PREFIX                  "TST"
 #define MUSE_SYMBOL_STRING   					(BASE_SYMBOL)
 #define MBD_SYMBOL_STRING     					"TBD"
 
 #define MUSE_GENESIS_TIME                    (fc::time_point_sec(1451606400))
-#define MUSE_MINING_TIME                     (fc::time_point_sec(1451606400))
-#define MUSE_CASHOUT_WINDOW_SECONDS          (60*60) /// 1 hr
-#define MUSE_CASHOUT_WINDOW_SECONDS_PRE_HF12 (MUSE_CASHOUT_WINDOW_SECONDS)
-#define MUSE_SECOND_CASHOUT_WINDOW           (60*60*24*3) /// 3 days
-#define MUSE_MAX_CASHOUT_WINDOW_SECONDS      (60*60*24) /// 1 day
 #define MUSE_VOTE_CHANGE_LOCKOUT_PERIOD      (60*10) /// 10 minutes
 
-
-#define MUSE_ORIGINAL_MIN_ACCOUNT_CREATION_FEE 0
 #define MUSE_MIN_ACCOUNT_CREATION_FEE          0
 
 #define MUSE_OWNER_AUTH_RECOVERY_PERIOD                  fc::seconds(60)
@@ -51,14 +37,8 @@
 #define NULL_SYMBOL  (uint64_t(3) )
 
 #define MUSE_GENESIS_TIME                    (fc::time_point_sec(1458835200))
-#define MUSE_MINING_TIME                     (fc::time_point_sec(1458838800))
-#define MUSE_CASHOUT_WINDOW_SECONDS_PRE_HF12 (60*60*24)  /// 1 day
-#define MUSE_CASHOUT_WINDOW_SECONDS          (60*60*12)  /// 12 hours
-#define MUSE_SECOND_CASHOUT_WINDOW           (60*60*24*30) /// 30 days
-#define MUSE_MAX_CASHOUT_WINDOW_SECONDS      (60*60*24*14) /// 2 weeks
 #define MUSE_VOTE_CHANGE_LOCKOUT_PERIOD      (60*60*2) /// 2 hours
 
-#define MUSE_ORIGINAL_MIN_ACCOUNT_CREATION_FEE  100000
 #define MUSE_MIN_ACCOUNT_CREATION_FEE           1
 
 #define MUSE_OWNER_AUTH_RECOVERY_PERIOD                  fc::days(30)
@@ -78,14 +58,8 @@
 #define NULL_SYMBOL  (uint64_t(3) )
 
 #define MUSE_GENESIS_TIME                    (fc::time_point_sec(1458835200))
-#define MUSE_MINING_TIME                     (fc::time_point_sec(1458838800))
-#define MUSE_CASHOUT_WINDOW_SECONDS_PRE_HF12 (60*60*24)  /// 1 day
-#define MUSE_CASHOUT_WINDOW_SECONDS          (60*60*12)  /// 12 hours
-#define MUSE_SECOND_CASHOUT_WINDOW           (60*60*24*30) /// 30 days
-#define MUSE_MAX_CASHOUT_WINDOW_SECONDS      (60*60*24*14) /// 2 weeks
 #define MUSE_VOTE_CHANGE_LOCKOUT_PERIOD      (60*60*2) /// 2 hours
 
-#define MUSE_ORIGINAL_MIN_ACCOUNT_CREATION_FEE  100000
 #define MUSE_MIN_ACCOUNT_CREATION_FEE           1
 
 #define MUSE_OWNER_AUTH_RECOVERY_PERIOD                  fc::days(30)

@@ -51,24 +51,21 @@ int main(int argc, char** argv) {
    fc::oexception unhandled_exception;
    try {
 
+      std::cerr << "------------------------------------------------------\n\n";
 #ifdef IS_TEST_NET
-      std::cerr << "------------------------------------------------------\n\n";
       std::cerr << "            STARTING TEST NETWORK\n\n";
-      std::cerr << "------------------------------------------------------\n";
-      auto initminer_private_key = graphene::utilities::key_to_wif( MUSE_INIT_PRIVATE_KEY );
-      std::cerr << "initminer public key: " << MUSE_INIT_PUBLIC_KEY_STR << "\n";
-      std::cerr << "initminer private key: " << initminer_private_key << "\n";
-      std::cerr << "chain id: " << std::string(MUSE_CHAIN_ID) << "\n";
-      std::cerr << "------------------------------------------------------\n";
 #else
-      std::cerr << "------------------------------------------------------\n\n";
       std::cerr << "            STARTING MUSE NETWORK\n\n";
+#endif
       std::cerr << "------------------------------------------------------\n";
       std::cerr << "initminer public key: " << MUSE_INIT_PUBLIC_KEY_STR << "\n";
+#ifdef MUSE_INIT_PRIVATE_KEY
+      auto initminer_private_key = graphene::utilities::key_to_wif( MUSE_INIT_PRIVATE_KEY );
+      std::cerr << "initminer private key: " << initminer_private_key << "\n";
+#endif
       std::cerr << "chain id: " << std::string(MUSE_CHAIN_ID) << "\n";
       std::cerr << "version: " << graphene::utilities::git_revision_description << "\n";
       std::cerr << "------------------------------------------------------\n";
-#endif
 
       bpo::options_description app_options("Muse Daemon");
       bpo::options_description cfg_options("Muse Daemon");
