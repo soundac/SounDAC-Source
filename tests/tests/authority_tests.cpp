@@ -1565,4 +1565,73 @@ BOOST_FIXTURE_TEST_CASE( other_authority, database_fixture )
    BOOST_REQUIRE_THROW( PUSH_TX( db, trx ), fc::assert_exception );
 } FC_LOG_AND_RETHROW() }
 
+BOOST_FIXTURE_TEST_CASE( self_approving_proposal, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   ACTORS( (alice) );
+   fund( "alice", 100000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
+   trx.clear();
+
+   proposal_update_operation pup;
+   pup.proposal = proposal_id_type(0);
+   pup.active_approvals_to_add.insert( "alice" );
+
+   proposal_create_operation pop;
+   pop.proposed_ops.emplace_back(pup);
+   pop.expiration_time = db.head_block_time() + fc::days(1);
+   trx.operations.push_back(pop);
+   PUSH_TX( db, trx, ~0 );
+   auto itr = pidx.end();
+   const proposal_id_type pid1 = (--itr)->id;
+   trx.clear();
+   BOOST_REQUIRE_EQUAL( 0, pid1.instance.value );
+   db.get<proposal_object>(pid1);
+
+   trx.operations.push_back(pup);
+   PUSH_TX( db, trx, ~0 );
+
+   // Proposal failed and still exists
+   db.get<proposal_object>(pid1);
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE( self_deleting_proposal, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   ACTORS( (alice) );
+   fund( "alice", 100000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
+   trx.clear();
+
+   proposal_delete_operation pdo;
+   pdo.proposal = proposal_id_type(0);
+   pdo.vetoer = "alice";
+
+   proposal_create_operation pop;
+   pop.proposed_ops.emplace_back( pdo );
+   pop.expiration_time = db.head_block_time() + fc::minutes(1);
+   trx.operations.push_back( pop );
+   PUSH_TX( db, trx, ~0 );
+   auto itr = pidx.end();
+   const proposal_id_type pid1 = (--itr)->id;
+   trx.clear();
+   BOOST_REQUIRE_EQUAL( 0, pid1.instance.value );
+   db.get<proposal_object>(pid1);
+
+   proposal_update_operation pup;
+   pup.proposal = proposal_id_type(0);
+   pup.active_approvals_to_add.insert( "alice" );
+   trx.operations.push_back(pup);
+   PUSH_TX( db, trx, ~0 );
+
+   // Proposal failed and still exists
+   db.get<proposal_object>(pid1);
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -115,6 +115,40 @@ namespace impl {
       private:
          database& _db;
    };
+
+   // BitShares issue #1479: disallow updating/deleting future proposals
+   class hardfork_visitor_1479
+   {
+   public:
+      typedef void result_type;
+
+      uint64_t max_update_instance = 0;
+      uint64_t nested_update_count = 0;
+
+      template<typename T>
+      void operator()(const T &v) const {}
+
+      void operator()(const proposal_delete_operation &v)
+      {
+         if( nested_update_count == 0 || v.proposal.instance.value > max_update_instance )
+            max_update_instance = v.proposal.instance.value;
+         nested_update_count++;
+      }
+
+      void operator()(const proposal_update_operation &v)
+      {
+         if( nested_update_count == 0 || v.proposal.instance.value > max_update_instance )
+            max_update_instance = v.proposal.instance.value;
+         nested_update_count++;
+      }
+
+      // loop and self visit in proposals
+      void operator()(const muse::chain::proposal_create_operation &v)
+      {
+         for (const op_wrapper &op : v.proposed_ops)
+            op.op.visit(*this);
+      }
+   };
 }
 
 struct authority_collector {
@@ -143,6 +177,8 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
 
    muse::chain::impl::proposal_op_visitor vtor(d);
    vtor( o );
+   impl::hardfork_visitor_1479 vtor_1479;
+   vtor_1479( o );
 
    transaction _proposed_trx;
    const auto& global_parameters = d.get_dynamic_global_properties();
@@ -161,7 +197,20 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
 
    dlog( "Proposal: ${op}", ("op",o) );
 
-   d.create<proposal_object>([&o, &_proposed_trx, &d](proposal_object& proposal) {
+   d.create<proposal_object>([&o, &_proposed_trx, &d, &vtor_1479](proposal_object& proposal) {
+      if( d.has_hardfork( MUSE_HARDFORK_0_4 ) )
+         FC_ASSERT( vtor_1479.nested_update_count == 0 || proposal.id.instance() > vtor_1479.max_update_instance,
+                    "Cannot update/delete a proposal with a future id!" );
+      else if( vtor_1479.nested_update_count > 0 && proposal.id.instance() <= vtor_1479.max_update_instance )
+      { // TODO: remove after hf if possible
+         // prevent approval
+         transfer_operation top;
+         top.from = MUSE_NULL_ACCOUNT;
+         top.to = MUSE_TEMP_ACCOUNT;
+         top.amount = asset( MUSE_MAX_SHARE_SUPPLY );
+         _proposed_trx.operations.emplace_back( top );
+         wlog( "Issue 1479: ${p}", ("p",proposal) );
+      }
       _proposed_trx.expiration = o.expiration_time;
       proposal.proposed_transaction = _proposed_trx;
       proposal.expiration_time = o.expiration_time;
