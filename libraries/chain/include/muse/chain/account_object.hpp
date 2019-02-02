@@ -74,6 +74,8 @@ namespace muse { namespace chain {
          share_type      posting_rewards = 0;
 
          asset           vesting_shares = asset( 0, VESTS_SYMBOL ); ///< total vesting shares held by this account, controls its voting power
+         asset           delegated_vesting_shares = asset( 0, VESTS_SYMBOL );
+         asset           received_vesting_shares = asset( 0, VESTS_SYMBOL );
          asset           vesting_withdraw_rate = asset( 0, VESTS_SYMBOL ); ///< at the time this is updated it can be at most vesting_shares/104
          time_point_sec  next_vesting_withdrawal = fc::time_point_sec::maximum(); ///< after every withdrawal this is incremented by 1 week
          share_type      withdrawn = 0; /// Track how many shares have been withdrawn
@@ -186,6 +188,29 @@ namespace muse { namespace chain {
 
          set<string>             before_account_members;
          set<public_key_type>    before_key_members;
+   };
+
+   class vesting_delegation_object : public abstract_object< vesting_delegation_object >
+   {
+      public:
+         static const uint8_t space_id = implementation_ids;
+         static const uint8_t type_id  = impl_vesting_delegation_object_type;
+
+         string            delegator;
+         string            delegatee;
+         asset             vesting_shares;
+         time_point_sec    min_delegation_time;
+   };
+
+   class vesting_delegation_expiration_object : public abstract_object< vesting_delegation_expiration_object >
+   {
+      public:
+         static const uint8_t space_id = implementation_ids;
+         static const uint8_t type_id  = impl_vesting_delegation_expiration_object_type;
+
+         string            delegator;
+         asset             vesting_shares;
+         time_point_sec    expiration;
    };
 
    class owner_authority_history_object : public abstract_object< owner_authority_history_object >
@@ -312,6 +337,49 @@ namespace muse { namespace chain {
       >
    > account_multi_index_type;
 
+   struct by_delegation;
+
+   typedef multi_index_container <
+      vesting_delegation_object,
+      indexed_by <
+         ordered_unique< tag< by_id >,
+            member< object, object_id_type, &object::id > >,
+         ordered_unique< tag< by_delegation >,
+            composite_key< vesting_delegation_object,
+               member< vesting_delegation_object, string, &vesting_delegation_object::delegator >,
+               member< vesting_delegation_object, string, &vesting_delegation_object::delegatee >
+            >,
+            composite_key_compare< std::less< string >, std::less< string > >
+         >
+      >
+   > vesting_delegation_multi_index_type;
+
+   struct by_expiration;
+   struct by_account_expiration;
+
+   typedef multi_index_container <
+      vesting_delegation_expiration_object,
+      indexed_by <
+         ordered_unique< tag< by_id >,
+            member< object, object_id_type, &object::id > >,
+         ordered_unique< tag< by_expiration >,
+            composite_key< vesting_delegation_expiration_object,
+               member< vesting_delegation_expiration_object, time_point_sec, &vesting_delegation_expiration_object::expiration >,
+               member<object, object_id_type, &object::id >
+            >,
+            composite_key_compare< std::less< time_point_sec >, std::less< object_id_type > >
+         >,
+         ordered_unique< tag< by_account_expiration >,
+            composite_key< vesting_delegation_expiration_object,
+               member< vesting_delegation_expiration_object, string, &vesting_delegation_expiration_object::delegator >,
+               member< vesting_delegation_expiration_object, time_point_sec, &vesting_delegation_expiration_object::expiration >,
+               member<object, object_id_type, &object::id >
+            >,
+            composite_key_compare< std::less< string >, std::less< time_point_sec >, std::less< object_id_type > >
+         >
+      >
+   > vesting_delegation_expiration_multi_index_type;
+
    struct by_account;
    struct by_last_valid;
 
@@ -330,8 +398,6 @@ namespace muse { namespace chain {
          >
       >
    > owner_authority_history_multi_index_type;
-
-   struct by_expiration;
 
    typedef multi_index_container <
       account_recovery_request_object,
@@ -383,6 +449,8 @@ namespace muse { namespace chain {
    typedef generic_index< owner_authority_history_object,         owner_authority_history_multi_index_type >         owner_authority_history_index;
    typedef generic_index< account_recovery_request_object,        account_recovery_request_multi_index_type >        account_recovery_request_index;
    typedef generic_index< change_recovery_account_request_object, change_recovery_account_request_multi_index_type > change_recovery_account_request_index;
+   typedef generic_index< vesting_delegation_object,              vesting_delegation_multi_index_type >              vesting_delegation_index;
+   typedef generic_index< vesting_delegation_expiration_object,   vesting_delegation_expiration_multi_index_type >   vesting_delegation_expiration_index;
 
    struct by_account_asset;
    struct by_asset_balance;
@@ -429,7 +497,8 @@ FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (comment_count)(lifetime_vote_count)(post_count)(voting_power)(last_vote_time)
                     (balance)
                     (mbd_balance)(mbd_seconds)(mbd_seconds_last_update)(mbd_last_interest_payment)
-                    (vesting_shares)(vesting_withdraw_rate)(next_vesting_withdrawal)(withdrawn)(to_withdraw)(withdraw_routes)
+                    (vesting_shares)(delegated_vesting_shares)(received_vesting_shares)
+                    (vesting_withdraw_rate)(next_vesting_withdrawal)(withdrawn)(to_withdraw)(withdraw_routes)
                     (curation_rewards)
                     (posting_rewards)(score)
                     (proxied_vsf_votes)(witnesses_voted_for)(streaming_platforms_voted_for)
@@ -439,6 +508,11 @@ FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (last_active)(activity_shares)(last_activity_payout)
                     (friends)(second_level)(waiting)
                   )
+FC_REFLECT_DERIVED( muse::chain::vesting_delegation_object, (graphene::db::object),
+                     (delegator)(delegatee)(vesting_shares)(min_delegation_time) )
+
+FC_REFLECT_DERIVED( muse::chain::vesting_delegation_expiration_object, (graphene::db::object),
+                     (delegator)(vesting_shares)(expiration) )
 
 FC_REFLECT_DERIVED( muse::chain::owner_authority_history_object, (graphene::db::object),
                      (account)(previous_owner_authority)(last_valid_time)

@@ -15,6 +15,7 @@ class X ## _evaluator : public evaluator< X ## _evaluator > { public: \
 }; 
 
 DEFINE_EVALUATOR( account_create )
+DEFINE_EVALUATOR( account_create_with_delegation )
 DEFINE_EVALUATOR( account_update )
 DEFINE_EVALUATOR( transfer )
 DEFINE_EVALUATOR( transfer_to_vesting )
@@ -57,4 +58,5 @@ DEFINE_EVALUATOR( proposal_delete )
 DEFINE_EVALUATOR( friendship )
 DEFINE_EVALUATOR( unfriend )
 DEFINE_EVALUATOR( balance_claim )
+DEFINE_EVALUATOR( delegate_vesting_shares )
 } } // muse::chain
