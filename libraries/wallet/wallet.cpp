@@ -1180,8 +1180,6 @@ public:
 
    flat_map<string, operation>             _prototype_ops;
 
-   static_variant_map _operation_which_map = create_static_variant_map< operation >();
-
 #ifdef __unix__
    mode_t                  _old_umask;
 #endif
