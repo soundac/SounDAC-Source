@@ -1420,4 +1420,51 @@ BOOST_AUTO_TEST_CASE( basic_authority )
    BOOST_CHECK_EQUAL( 0, pidx.size() );
 } FC_LOG_AND_RETHROW() }
 
+BOOST_FIXTURE_TEST_CASE( other_authority, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   generate_block();
+
+   ACTORS( (alice) );
+   fund( "alice", 1000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+   const auto& bidx = db.get_index_type<balance_index>().indices().get<by_id>();
+   const auto& balance = *bidx.begin();
+
+   transfer_operation top;
+   top.from = "alice";
+   top.to = MUSE_NULL_ACCOUNT;
+   top.amount = asset( 1 );
+
+   balance_claim_operation bco;
+   bco.deposit_to_account = "alice";
+   bco.balance_to_claim = balance.id;
+   bco.balance_owner_key = fc::ecc::private_key::regenerate( fc::sha256::hash( string( "balance_key_1" ) ) ).get_public_key();
+   bco.total_claimed = balance.balance;
+
+   proposal_create_operation pco;
+   pco.proposed_ops.emplace_back( top );
+   pco.proposed_ops.emplace_back( bco );
+   pco.expiration_time = db.head_block_time() + fc::minutes(1);
+   trx.operations.push_back( pco );
+   PUSH_TX( db, trx );
+   trx.clear();
+   pco.proposed_ops.clear();
+
+   proposal_update_operation pup;
+   pup.proposal = pidx.begin()->id;
+   pup.active_approvals_to_add.insert( "alice" );
+   trx.operations.push_back( pup );
+   sign( trx, alice_private_key );
+   PUSH_TX( db, trx );
+   trx.signatures.clear();
+
+   // verify it didn't execute
+   BOOST_CHECK_EQUAL( 1, pidx.size() );
+   BOOST_CHECK_GT( bidx.size(), 0 );
+   BOOST_CHECK_EQUAL( 1000, get_balance( "alice" ).amount.value );
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_SUITE_END()
