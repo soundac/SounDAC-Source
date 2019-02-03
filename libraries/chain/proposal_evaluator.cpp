@@ -179,6 +179,9 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
       for( const string& o : proposal.required_owner_approvals )
          proposal.required_basic_approvals.erase( o );
 
+      if( d.has_hardfork( MUSE_HARDFORK_0_4 ) )
+         FC_ASSERT( other.size() == 0, "Cannot propose operations that require other authority!" );
+
       FC_ASSERT( proposal.required_basic_approvals.size() == 0
                  || ( required_active.size() == 0
                       && proposal.required_owner_approvals.size() == 0

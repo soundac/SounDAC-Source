@@ -1465,6 +1465,14 @@ BOOST_FIXTURE_TEST_CASE( other_authority, database_fixture )
    BOOST_CHECK_EQUAL( 1, pidx.size() );
    BOOST_CHECK_GT( bidx.size(), 0 );
    BOOST_CHECK_EQUAL( 1000, get_balance( "alice" ).amount.value );
+
+   db.set_hardfork( 4 );
+   generate_block();
+
+   // not allowed after hf 4
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   sign( trx, alice_private_key );
+   BOOST_REQUIRE_THROW( PUSH_TX( db, trx ), fc::assert_exception );
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()
