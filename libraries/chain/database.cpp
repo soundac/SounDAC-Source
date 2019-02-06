@@ -2617,7 +2617,8 @@ void database::_apply_transaction(const signed_transaction& trx)
       auto get_comp_cont = [&]( const string& url ) { return &get_content(url).manage_comp; };
 
       trx.verify_authority( chain_id, get_active, get_owner, get_basic, get_master_cont, get_comp_cont,
-                            !has_hardfork( MUSE_HARDFORK_0_3 ) ? 1 : 2 );
+                            has_hardfork( MUSE_HARDFORK_0_4 ) ? 3 :
+                            has_hardfork( MUSE_HARDFORK_0_3 ) ? 2 : 1 );
    }
    flat_set<string> required; vector<authority> other;
    flat_set<string> required_content;
@@ -2823,9 +2824,32 @@ void database::update_virtual_supply()
    });
 }
 
+class push_proposal_nesting_guard {
+public:
+   push_proposal_nesting_guard( uint32_t& nesting_counter )
+      : orig_value(nesting_counter), counter(nesting_counter)
+   {
+      FC_ASSERT( counter < MUSE_MAX_MINERS * 2, "Max proposal nesting depth exceeded!" );
+      counter++;
+   }
+   ~push_proposal_nesting_guard()
+   {
+      if( --counter != orig_value )
+         elog( "Unexpected proposal nesting count value: ${n} != ${o}", ("n",counter)("o",orig_value) );
+   }
+private:
+   const uint32_t  orig_value;
+   uint32_t& counter;
+};
+
 void database::push_proposal(const proposal_object& proposal)
 { try {
    dlog( "Proposal: executing ${p}", ("p",proposal) );
+
+   push_proposal_nesting_guard guard( _push_proposal_nesting_depth );
+
+   if( _undo_db.size() >= _undo_db.max_size() )
+      _undo_db.set_max_size( _undo_db.size() + 1 );
 
    auto session = _undo_db.start_undo_session(true);
    _current_op_in_trx = 0;

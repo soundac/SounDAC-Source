@@ -1248,7 +1248,8 @@ bool database_api_impl::verify_authority( const signed_transaction& trx )const
                          [&]( string account_name ){ return &_db.get_account( account_name ).basic; },
                          [&]( string content_url ){ return &_db.get_content( content_url ).manage_master; },
                          [&]( string content_url ){ return &_db.get_content( content_url ).manage_comp; },
-                         !_db.has_hardfork( MUSE_HARDFORK_0_3 ) ? 1 : 2 );
+                         _db.has_hardfork( MUSE_HARDFORK_0_4 ) ? 3 :
+                         _db.has_hardfork( MUSE_HARDFORK_0_3 ) ? 2 : 1 );
    return true;
 }
 

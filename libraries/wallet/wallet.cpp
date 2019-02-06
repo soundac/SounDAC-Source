@@ -810,7 +810,8 @@ public:
               optional<content_object> content = *_remote_db->get_content_by_url ( content_url );
               return &content->manage_comp;
          },
-         _remote_db->get_hardfork_version() < MUSE_HARDFORK_0_3_VERSION ? 1 : 2,
+         _remote_db->get_hardfork_version() < MUSE_HARDFORK_0_3_VERSION ? 1 :
+         _remote_db->get_hardfork_version() < MUSE_HARDFORK_0_4_VERSION ? 2 : 3,
          MUSE_MAX_SIG_CHECK_DEPTH
          );
 
