@@ -38,7 +38,6 @@ FC_REFLECT( tx_signing_result, (digest)(sig_digest)(key)(sig) )
 int main()
 {
    // hash key pairs on stdin
-   std::string chain_id, hash, wif;
    while( std::cin )
    {
       std::string line;

@@ -361,13 +361,13 @@ const signed_transaction& database::get_recent_transaction(const transaction_id_
 std::vector<block_id_type> database::get_block_ids_on_fork(block_id_type head_of_fork) const
 {
    pair<fork_database::branch_type, fork_database::branch_type> branches = _fork_db.fetch_branch_from(head_block_id(), head_of_fork);
-   if( !((branches.first.back()->previous_id() == branches.second.back()->previous_id())) )
+   if( branches.first.back()->previous_id() != branches.second.back()->previous_id() )
    {
       edump( (head_of_fork)
              (head_block_id())
              (branches.first.size())
              (branches.second.size()) );
-      assert(branches.first.back()->previous_id() == branches.second.back()->previous_id());
+      assert( false );
    }
    std::vector<block_id_type> result;
    for( const item_ptr& fork_block : branches.second )
@@ -1278,11 +1278,8 @@ void database::update_witness_schedule4()
  */
 void database::update_witness_schedule()
 {
-   if( (head_block_num() % MUSE_MAX_MINERS) == 0 ) //wso.next_shuffle_block_num )
-   {
+   if( (head_block_num() % MUSE_MAX_MINERS) == 0 )
       update_witness_schedule4();
-      return;
-   }
 }
 
 void database::update_median_witness_props()
@@ -1529,7 +1526,6 @@ void database::process_vesting_withdrawals()
 
       share_type vests_deposited_as_muse = 0;
       share_type vests_deposited_as_vests = 0;
-      asset total_muse_converted = asset( 0, MUSE_SYMBOL );
 
       // Do two passes, the first for vests, the second for muse. Try to maintain as much accuracy for vests as possible.
       for( auto itr = didx.upper_bound( boost::make_tuple( from_account.id, account_id_type() ) );
@@ -1568,7 +1564,6 @@ void database::process_vesting_withdrawals()
             share_type to_deposit = ( ( fc::uint128_t ( to_withdraw.value ) * itr->percent ) / MUSE_100_PERCENT ).to_uint64();
             vests_deposited_as_muse += to_deposit;
             auto converted_muse = asset( to_deposit, VESTS_SYMBOL ) * cprops.get_vesting_share_price();
-            total_muse_converted += converted_muse;
 
             if( to_deposit > 0 )
             {
@@ -2302,7 +2297,6 @@ void database::init_genesis( const genesis_state_type& initial_allocation )
          });
       }
       //initial balances
-      share_type total_allocation;
       for( const auto& handout : initial_allocation.initial_balances )
       {
          /*const auto asset_id = get_asset_id(handout.asset_symbol);

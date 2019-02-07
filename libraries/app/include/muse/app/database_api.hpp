@@ -235,12 +235,6 @@ class database_api
        */
       void cancel_all_subscriptions();
 
-      /**
-       *  This API is a short-cut for returning all of the state required for a particular URL
-       *  with a single query. Not used in MUSE
-       */
-      //state get_state( string path )const;
-      
       /*********************
        * Get list of active witnesses
        * @return List of witnesses

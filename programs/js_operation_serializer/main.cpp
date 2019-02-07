@@ -308,7 +308,6 @@ struct serializer< fc::static_variant<>, false >
       if( !init )
       {
          init = true;
-         fc::static_variant<> var;
          register_serializer( js_name<fc::static_variant<>>::name(), [=](){ generate(); } );
       }
    }
