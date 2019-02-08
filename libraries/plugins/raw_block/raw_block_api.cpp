@@ -63,8 +63,6 @@ void raw_block_api::push_raw_block( std::string block_b64 )
    fc::raw::unpack( ss, block );
 
    db->push_block( block );
-
-   return;
 }
 
 void raw_block_api::on_api_startup() { }

@@ -66,15 +66,13 @@ void auth_util_api_impl::check_authority_signature( const check_authority_signat
       signing_keys.insert( result.keys.back() );
    }
 
-   chain::sign_state ss( signing_keys, [&db]( const std::string& account_name ) -> const chain::authority*
+   chain::sign_state ss( signing_keys, [&db]( const std::string& account_name )
    {
       return &db->get_account( account_name ).active;
    } );
 
    bool has_authority = ss.check_authority( auth );
    FC_ASSERT( has_authority );
-
-   return;
 }
 
 } // detail

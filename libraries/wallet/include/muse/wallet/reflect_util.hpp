@@ -104,19 +104,4 @@ T from_which_variant( int which, const variant& v, uint32_t max_depth )
    return dummy.visit( vtor );
 }
 
-template<typename T>
-static_variant_map create_static_variant_map()
-{
-   T dummy;
-   int n = dummy.count();
-   impl::static_variant_map_visitor vtor;
-   for( int i=0; i<n; i++ )
-   {
-      dummy.set_which(i);
-      vtor.which = i;
-      dummy.visit( vtor );
-   }
-   return vtor.m;
-}
-
 } } // namespace muse::wallet
