@@ -140,7 +140,6 @@ void convert_to_c_array(
       row++;
    }
    std::cerr << "\n";
-   return;
 }
 
 struct egenesis_info
@@ -205,8 +204,6 @@ void load_genesis(
       info.genesis_json = std::string();
       read_file_contents( genesis_json_filename, *info.genesis_json );
    }
-   //else
-     // *info.genesis = ""; //muse::app::detail::create_example_genesis();
 
    if( options.count("chain-id") )
    {

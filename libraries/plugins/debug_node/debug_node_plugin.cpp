@@ -224,7 +224,6 @@ void debug_node_plugin::plugin_shutdown()
       _json_object_stream->close();
       _json_object_stream.reset();
    }
-   return;
 }
 
 } } }

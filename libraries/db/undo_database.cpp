@@ -208,17 +208,11 @@ void undo_database::merge()
    for( auto& item : state.old_index_next_ids )
    {
       if( prev_state.old_index_next_ids.find( item.first ) == prev_state.old_index_next_ids.end() )
-      {
          // nop+upd(was=Y) -> upd(was=Y), type B
          prev_state.old_index_next_ids[item.first] = item.second;
-         continue;
-      }
-      else
-      {
+      // else
          // upd(was=X)+upd(was=Y) -> upd(was=X), type A
          // type A implementation is a no-op, as discussed above, so there is no code here
-         continue;
-      }
    }
 
    // *+del

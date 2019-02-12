@@ -3444,6 +3444,7 @@ BOOST_AUTO_TEST_CASE( change_recovery_account )
       fc::ecc::private_key alice_priv1 = fc::ecc::private_key::regenerate( fc::sha256::hash( "alice_k1" ) );
       fc::ecc::private_key alice_priv2 = fc::ecc::private_key::regenerate( fc::sha256::hash( "alice_k2" ) );
       public_key_type alice_pub1 = public_key_type( alice_priv1.get_public_key() );
+      public_key_type alice_pub2 = public_key_type( alice_priv2.get_public_key() );
 
       generate_blocks( db.head_block_time() + MUSE_OWNER_AUTH_RECOVERY_PERIOD - fc::seconds( MUSE_BLOCK_INTERVAL ), true );
       // cannot request account recovery until recovery account is approved
@@ -3456,7 +3457,7 @@ BOOST_AUTO_TEST_CASE( change_recovery_account )
       // can't recover with the current owner key
       MUSE_REQUIRE_THROW( recover_account( "alice", alice_priv1, alice_private_key ), fc::exception );
       // unless we change it!
-      change_owner( "alice", alice_private_key, public_key_type( alice_priv2.get_public_key() ) );
+      change_owner( "alice", alice_private_key, public_key_type( alice_pub2 ) );
       recover_account( "alice", alice_priv1, alice_private_key );
    }
    FC_LOG_AND_RETHROW()

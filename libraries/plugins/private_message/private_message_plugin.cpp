@@ -44,7 +44,6 @@ class private_message_plugin_impl
       private_message_plugin_impl(private_message_plugin& _plugin)
          : _self( _plugin )
       { }
-      virtual ~private_message_plugin_impl();
 
       muse::chain::database& database()
       {
@@ -56,11 +55,6 @@ class private_message_plugin_impl
       private_message_plugin& _self;
       flat_map<string,string> _tracked_accounts;
 };
-
-private_message_plugin_impl::~private_message_plugin_impl()
-{
-   return;
-}
 
 void private_message_plugin_impl::on_operation( const operation_object& op_obj ) {
    muse::chain::database& db = database();
