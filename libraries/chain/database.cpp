@@ -361,13 +361,13 @@ const signed_transaction& database::get_recent_transaction(const transaction_id_
 std::vector<block_id_type> database::get_block_ids_on_fork(block_id_type head_of_fork) const
 {
    pair<fork_database::branch_type, fork_database::branch_type> branches = _fork_db.fetch_branch_from(head_block_id(), head_of_fork);
-   if( !((branches.first.back()->previous_id() == branches.second.back()->previous_id())) )
+   if( branches.first.back()->previous_id() != branches.second.back()->previous_id() )
    {
       edump( (head_of_fork)
              (head_block_id())
              (branches.first.size())
              (branches.second.size()) );
-      assert(branches.first.back()->previous_id() == branches.second.back()->previous_id());
+      assert( false );
    }
    std::vector<block_id_type> result;
    for( const item_ptr& fork_block : branches.second )
@@ -483,44 +483,43 @@ void database::update_account_bandwidth( const account_object& a, uint32_t trx_s
    const auto& props = get_dynamic_global_properties();
    if( props.total_vesting_shares.amount > 0 )
    {
-      modify( a, [&]( account_object& acnt )
+      const auto now = head_block_time();
+      modify( a, [&props,&now,this,trx_size]( account_object& acnt )
       {
-         acnt.lifetime_bandwidth += trx_size * MUSE_BANDWIDTH_PRECISION;
-
-         auto now = head_block_time();
-         auto delta_time = (now - a.last_bandwidth_update).to_seconds();
+         auto delta_time = (now - acnt.last_bandwidth_update).to_seconds();
          uint64_t N = trx_size * MUSE_BANDWIDTH_PRECISION;
+         acnt.lifetime_bandwidth += N;
          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
             acnt.average_bandwidth = N;
-         else
+         else if( has_hardfork(MUSE_HARDFORK_0_4) )
          {
+            auto old_weight = acnt.average_bandwidth;
+            if( delta_time > 0 )
+               old_weight = old_weight * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
+            acnt.average_bandwidth = old_weight + N;
+         }
+         else
+         {  // TODO: remove after HF
             auto old_weight = acnt.average_bandwidth * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time);
             auto new_weight = delta_time * N;
             acnt.average_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
          }
 
-         if( props.total_vesting_shares.amount > 0 )
-         {
-            fc::uint128 account_vshares;
-            if( a.vesting_shares.amount > 0 )
-               account_vshares = fc::uint128( a.vesting_shares.amount.value );
-            else
-               account_vshares = fc::uint128( 1 );
-            //FC_ASSERT( a.vesting_shares.amount > 0, "only accounts with a positive vesting balance may transact" );
+         fc::uint128 account_vshares( get_effective_vesting_shares(acnt, VESTS_SYMBOL).amount.value );
+         if( account_vshares == 0 )
+            account_vshares = fc::uint128( 1 );
 
-            fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 account_average_bandwidth( acnt.average_bandwidth );
+         fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth );
 
-            fc::uint128 account_average_bandwidth( acnt.average_bandwidth );
-            fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth );
-
-            // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
-            FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
-                       "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
-                       ("account_vshares",account_vshares)
-                       ("account_average_bandwidth",account_average_bandwidth)
-                       ("max_virtual_bandwidth",max_virtual_bandwidth)
-                       ("total_vshares",total_vshares) );
-         }
+         // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
+         FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
+                    "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
+                    ("account_vshares",account_vshares)
+                    ("account_average_bandwidth",account_average_bandwidth)
+                    ("max_virtual_bandwidth",max_virtual_bandwidth)
+                    ("total_vshares",total_vshares) );
          acnt.last_bandwidth_update = now;
       } );
    }
@@ -532,10 +531,10 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
    const auto& props = get_dynamic_global_properties();
    if( props.total_vesting_shares.amount > 0 )
    {
-      modify( a, [&]( account_object& acnt )
+      const auto now = head_block_time();
+      modify( a, [&props,&now,this,trx_size]( account_object& acnt )
       {
-         auto now = head_block_time();
-         auto delta_time = (now - a.last_market_bandwidth_update).to_seconds();
+         auto delta_time = (now - acnt.last_market_bandwidth_update).to_seconds();
          uint64_t N = trx_size * MUSE_BANDWIDTH_PRECISION;
          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
             acnt.average_market_bandwidth = N;
@@ -546,27 +545,31 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
             acnt.average_market_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
          }
 
-         if( props.total_vesting_shares.amount > 0 )
-         {
-            FC_ASSERT( a.vesting_shares.amount > 0, "only accounts with a positive vesting balance may transact" );
+         fc::uint128 account_vshares( get_effective_vesting_shares(acnt, VESTS_SYMBOL).amount.value );
+         FC_ASSERT( account_vshares > 0, "only accounts with a positive vesting balance may transact" );
 
-            fc::uint128 account_vshares(a.vesting_shares.amount.value);
-            fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
 
-            fc::uint128 account_average_bandwidth( acnt.average_market_bandwidth );
-            fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth / 10 ); /// only 10% of bandwidth can be market
+         fc::uint128 account_average_bandwidth( acnt.average_market_bandwidth );
+         fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth / 10 ); /// only 10% of bandwidth can be market
 
-            // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
-            FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
-                       "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
-                       ("account_vshares",account_vshares)
-                       ("account_average_bandwidth",account_average_bandwidth)
-                       ("max_virtual_bandwidth",max_virtual_bandwidth)
-                       ("total_vshares",total_vshares) );
-         }
+         // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
+         FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
+                    "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
+                    ("account_vshares",account_vshares)
+                    ("account_average_bandwidth",account_average_bandwidth)
+                    ("max_virtual_bandwidth",max_virtual_bandwidth)
+                    ("total_vshares",total_vshares) );
          acnt.last_market_bandwidth_update = now;
       } );
    }
+}
+
+asset database::get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const
+{
+   if( vested_symbol == VESTS_SYMBOL )
+      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares;
+   FC_ASSERT( false, "Invalid symbol" );
 }
 
 uint32_t database::witness_participation_rate()const
@@ -623,17 +626,20 @@ bool database::_push_block(const signed_block& new_block)
          //Only switch forks if new_head is actually higher than head
          if( new_head->data.block_num() > head_block_num() )
          {
-            ilog( "Switching to fork: ${id}", ("id",new_head->data.id()) );
+            wlog( "Switching to fork: ${id}", ("id",new_head->data.id()) );
             auto branches = _fork_db.fetch_branch_from(new_head->data.id(), head_block_id());
 
             // pop blocks until we hit the forked block
             while( head_block_id() != branches.second.back()->data.previous )
+            {
+               ilog( "popping block #${n} ${id}", ("n",head_block_num())("id",head_block_id()) );
                pop_block();
+            }
 
             // push all blocks on the new fork
             for( auto ritr = branches.first.rbegin(); ritr != branches.first.rend(); ++ritr )
             {
-                dlog( "pushing blocks from fork ${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->data.id()) );
+                ilog( "pushing block from fork #${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->id) );
                 optional<fc::exception> except;
                 try
                 {
@@ -649,21 +655,27 @@ bool database::_push_block(const signed_block& new_block)
                    // remove the rest of branches.first from the fork_db, those blocks are invalid
                    while( ritr != branches.first.rend() )
                    {
-                      _fork_db.remove( (*ritr)->data.id() );
+                      ilog( "removing block from fork_db #${n} ${id}", ("n",(*ritr)->data.block_num())("id",(*ritr)->id) );
+                      _fork_db.remove( (*ritr)->id );
                       ++ritr;
                    }
                    _fork_db.set_head( branches.second.front() );
 
                    // pop all blocks from the bad fork
                    while( head_block_id() != branches.second.back()->data.previous )
-                      pop_block();
-
-                   // restore all blocks from the good fork
-                   for( auto ritr = branches.second.rbegin(); ritr != branches.second.rend(); ++ritr )
                    {
+                      ilog( "popping block #${n} ${id}", ("n",head_block_num())("id",head_block_id()) );
+                      pop_block();
+                   }
+
+                   ilog( "Switching back to fork: ${id}", ("id",branches.second.front()->data.id()) );
+                   // restore all blocks from the good fork
+                   for( auto ritr2 = branches.second.rbegin(); ritr2 != branches.second.rend(); ++ritr2 )
+                   {
+                      ilog( "pushing block #${n} ${id}", ("n",(*ritr2)->data.block_num())("id",(*ritr2)->id) );
                       auto session = _undo_db.start_undo_session();
-                      apply_block( (*ritr)->data, skip );
-                      _block_id_to_block.store( new_block.id(), (*ritr)->data );
+                      apply_block( (*ritr2)->data, skip );
+                      _block_id_to_block.store( (*ritr2)->id, (*ritr2)->data );
                       session.commit();
                    }
                    throw *except;
@@ -1278,11 +1290,8 @@ void database::update_witness_schedule4()
  */
 void database::update_witness_schedule()
 {
-   if( (head_block_num() % MUSE_MAX_MINERS) == 0 ) //wso.next_shuffle_block_num )
-   {
+   if( (head_block_num() % MUSE_MAX_MINERS) == 0 )
       update_witness_schedule4();
-      return;
-   }
 }
 
 void database::update_median_witness_props()
@@ -1529,7 +1538,6 @@ void database::process_vesting_withdrawals()
 
       share_type vests_deposited_as_muse = 0;
       share_type vests_deposited_as_vests = 0;
-      asset total_muse_converted = asset( 0, MUSE_SYMBOL );
 
       // Do two passes, the first for vests, the second for muse. Try to maintain as much accuracy for vests as possible.
       for( auto itr = didx.upper_bound( boost::make_tuple( from_account.id, account_id_type() ) );
@@ -1568,7 +1576,6 @@ void database::process_vesting_withdrawals()
             share_type to_deposit = ( ( fc::uint128_t ( to_withdraw.value ) * itr->percent ) / MUSE_100_PERCENT ).to_uint64();
             vests_deposited_as_muse += to_deposit;
             auto converted_muse = asset( to_deposit, VESTS_SYMBOL ) * cprops.get_vesting_share_price();
-            total_muse_converted += converted_muse;
 
             if( to_deposit > 0 )
             {
@@ -2050,6 +2057,7 @@ void database::initialize_evaluators()
     register_evaluator<withdraw_vesting_evaluator>();
     register_evaluator<set_withdraw_vesting_route_evaluator>();
     register_evaluator<account_create_evaluator>();
+    register_evaluator<account_create_with_delegation_evaluator>();
     register_evaluator<account_update_evaluator>();
     register_evaluator<witness_update_evaluator>();
     register_evaluator<streaming_platform_update_evaluator>();
@@ -2093,6 +2101,7 @@ void database::initialize_evaluators()
     register_evaluator<friendship_evaluator>();
     register_evaluator<unfriend_evaluator>();
 
+    register_evaluator<delegate_vesting_shares_evaluator>();
 }
 
 void database::initialize_indexes()
@@ -2138,6 +2147,8 @@ void database::initialize_indexes()
 
    add_index< primary_index< content_vote_index > >();
    add_index< primary_index< balance_index > >();
+   add_index< primary_index< vesting_delegation_index > >();
+   add_index< primary_index< vesting_delegation_expiration_index > >();
 }
 
 void database::init_genesis( const genesis_state_type& initial_allocation )
@@ -2302,7 +2313,6 @@ void database::init_genesis( const genesis_state_type& initial_allocation )
          });
       }
       //initial balances
-      share_type total_allocation;
       for( const auto& handout : initial_allocation.initial_balances )
       {
          /*const auto asset_id = get_asset_id(handout.asset_symbol);
@@ -2454,6 +2464,7 @@ void database::_apply_block( const signed_block& next_block )
    clear_expired_transactions();
    clear_expired_proposals();
    clear_expired_orders();
+   clear_expired_delegations();
    update_witness_schedule();
 
    update_median_feed();
@@ -2600,7 +2611,8 @@ void database::_apply_transaction(const signed_transaction& trx)
       auto get_comp_cont = [&]( const string& url ) { return &get_content(url).manage_comp; };
 
       trx.verify_authority( chain_id, get_active, get_owner, get_basic, get_master_cont, get_comp_cont,
-                            !has_hardfork( MUSE_HARDFORK_0_3 ) ? 1 : 2 );
+                            has_hardfork( MUSE_HARDFORK_0_4 ) ? 3 :
+                            has_hardfork( MUSE_HARDFORK_0_3 ) ? 2 : 1 );
    }
    flat_set<string> required; vector<authority> other;
    flat_set<string> required_content;
@@ -2806,9 +2818,32 @@ void database::update_virtual_supply()
    });
 }
 
+class push_proposal_nesting_guard {
+public:
+   push_proposal_nesting_guard( uint32_t& nesting_counter )
+      : orig_value(nesting_counter), counter(nesting_counter)
+   {
+      FC_ASSERT( counter < MUSE_MAX_MINERS * 2, "Max proposal nesting depth exceeded!" );
+      counter++;
+   }
+   ~push_proposal_nesting_guard()
+   {
+      if( --counter != orig_value )
+         elog( "Unexpected proposal nesting count value: ${n} != ${o}", ("n",counter)("o",orig_value) );
+   }
+private:
+   const uint32_t  orig_value;
+   uint32_t& counter;
+};
+
 void database::push_proposal(const proposal_object& proposal)
 { try {
    dlog( "Proposal: executing ${p}", ("p",proposal) );
+
+   push_proposal_nesting_guard guard( _push_proposal_nesting_depth );
+
+   if( _undo_db.size() >= _undo_db.max_size() )
+      _undo_db.set_max_size( _undo_db.size() + 1 );
 
    auto session = _undo_db.start_undo_session(true);
    _current_op_in_trx = 0;
@@ -3027,6 +3062,25 @@ void database::clear_expired_orders()
    }
 }
 
+void database::clear_expired_delegations()
+{
+   auto now = head_block_time();
+   const auto& delegations_by_exp = get_index_type< vesting_delegation_expiration_index >().indices().get< by_expiration >();
+   auto itr = delegations_by_exp.begin();
+   while( itr != delegations_by_exp.end() && itr->expiration < now )
+   {
+      modify( get_account( itr->delegator ), [&]( account_object& a )
+      {
+         a.delegated_vesting_shares -= itr->vesting_shares;
+      });
+
+      push_applied_operation( return_vesting_delegation_operation( itr->delegator, itr->vesting_shares ) );
+
+      remove( *itr );
+      itr = delegations_by_exp.begin();
+   }
+}
+
 void database::clear_expired_proposals()
 {
    if ( !has_hardfork(MUSE_HARDFORK_0_3) ) return;
@@ -3168,6 +3222,9 @@ void database::init_hardforks()
    FC_ASSERT( MUSE_HARDFORK_0_3 == 3, "Invalid hardfork configuration" );
    _hardfork_times[ MUSE_HARDFORK_0_3 ] = fc::time_point_sec( MUSE_HARDFORK_0_3_TIME );
    _hardfork_versions[ MUSE_HARDFORK_0_3 ] = MUSE_HARDFORK_0_3_VERSION;
+   FC_ASSERT( MUSE_HARDFORK_0_4 == 4, "Invalid hardfork configuration" );
+   _hardfork_times[ MUSE_HARDFORK_0_4 ] = fc::time_point_sec( MUSE_HARDFORK_0_4_TIME );
+   _hardfork_versions[ MUSE_HARDFORK_0_4 ] = MUSE_HARDFORK_0_4_VERSION;
 
    const auto& hardforks = hardfork_property_id_type()( *this );
    FC_ASSERT( hardforks.last_hardfork <= MUSE_NUM_HARDFORKS, "Chain knows of more hardforks than configuration", ("hardforks.last_hardfork",hardforks.last_hardfork)("MUSE_NUM_HARDFORKS",MUSE_NUM_HARDFORKS) );

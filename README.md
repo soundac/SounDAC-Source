@@ -22,7 +22,7 @@ Build Status
 
 **master** | **develop** | **next_hardfork**
  --- | --- | ---
- [![master Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=master)](https://travis-ci.org/soundac/SounDAC-Source) | [![develop Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=develop)](https://travis-ci.org/soundac/SounDAC-Source) | [![next_hardfork Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=next_hardfork)](https://travis-ci.org/soundac/SounDAC-Source)
+ [![master Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=master)](https://travis-ci.org/soundac/SounDAC-Source) | [![develop Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=develop)](https://travis-ci.org/soundac/SounDAC-Source) | [![next_hardfork Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=next_hardfork)](https://travis-ci.org/soundac/SounDAC-Source) | [![testnet Build Status](https://travis-ci.org/soundac/SounDAC-Source.svg?branch=testnet)](https://travis-ci.org/soundac/SounDAC-Source)
 
 Code is Documentation
 ---------------------

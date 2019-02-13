@@ -29,12 +29,10 @@ namespace muse { namespace app {
 plugin::plugin()
 {
    _app = nullptr;
-   return;
 }
 
 plugin::~plugin()
-{
-   return;
+{ // nothing to do by default
 }
 
 std::string plugin::plugin_name()const
@@ -43,32 +41,27 @@ std::string plugin::plugin_name()const
 }
 
 void plugin::plugin_initialize( const boost::program_options::variables_map& options )
-{
-   return;
+{ // nothing to do by default
 }
 
 void plugin::plugin_startup()
-{
-   return;
+{ // nothing to do by default
 }
 
 void plugin::plugin_shutdown()
-{
-   return;
+{ // nothing to do by default
 }
 
 void plugin::plugin_set_app( application* app )
 {
    _app = app;
-   return;
 }
 
 void plugin::plugin_set_program_options(
    boost::program_options::options_description& command_line_options,
    boost::program_options::options_description& config_file_options
 )
-{
-   return;
+{ // nothing to do by default
 }
 
 } } // muse::app

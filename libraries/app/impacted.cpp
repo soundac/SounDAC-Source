@@ -33,9 +33,10 @@ using namespace fc;
 using namespace muse::chain;
 
 // TODO:  Review all of these, especially no-ops
-struct get_impacted_account_visitor
+class get_impacted_account_visitor
 {
    flat_set< string >& _impacted;
+public:
    get_impacted_account_visitor( flat_set< string >& impact ):_impacted( impact ) {}
    typedef void result_type;
 
@@ -47,6 +48,12 @@ struct get_impacted_account_visitor
    }
 
    void operator()( const account_create_operation& op )
+   {
+      _impacted.insert( op.new_account_name );
+      _impacted.insert( op.creator );
+   }
+
+   void operator()( const account_create_with_delegation_operation& op )
    {
       _impacted.insert( op.new_account_name );
       _impacted.insert( op.creator );
@@ -237,7 +244,17 @@ struct get_impacted_account_visitor
    {
       _impacted.insert( op.approver );
    }
-   //void operator()( const operation& op ){}
+
+   void operator()( const delegate_vesting_shares_operation& op )
+   {
+      _impacted.insert( op.delegator );
+      _impacted.insert( op.delegatee );
+   }
+
+   void operator()( const return_vesting_delegation_operation& op )
+   {
+      _impacted.insert( op.account );
+   }
 };
 
 void operation_get_impacted_accounts( const operation& op, flat_set< string >& result )

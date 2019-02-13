@@ -109,7 +109,7 @@ namespace muse { namespace chain {
           */
          uint64_t current_reserve_ratio = 1;
 
-
+         uint32_t delegation_return_period = MUSE_DELEGATION_RETURN_PERIOD;
    };
 }}
 
@@ -136,5 +136,6 @@ FC_REFLECT_DERIVED( muse::chain::dynamic_global_property_object, (graphene::db::
                     (last_irreversible_block_num)
                     (max_virtual_bandwidth)
                     (current_reserve_ratio)
+                    (delegation_return_period)
                   )
 

@@ -44,7 +44,6 @@ class account_history_plugin_impl
       account_history_plugin_impl(account_history_plugin& _plugin)
          : _self( _plugin )
       { }
-      virtual ~account_history_plugin_impl();
 
       muse::chain::database& database()
       {
@@ -56,11 +55,6 @@ class account_history_plugin_impl
       account_history_plugin& _self;
       flat_map<string,string> _tracked_accounts;
 };
-
-account_history_plugin_impl::~account_history_plugin_impl()
-{
-   return;
-}
 
 struct operation_visitor {
    operation_visitor( database& db, const operation_object& op, const operation_object*& n, string i ):_db(db),op_obj(op),new_obj(n),item(i){};

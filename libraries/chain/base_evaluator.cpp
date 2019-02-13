@@ -31,7 +31,7 @@ void witness_update_evaluator::do_apply( const witness_update_operation& o )
 {
    db().get_account( o.owner ); // verify owner exists
 
-   FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );
+   FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH ); // TODO: move to validate after HF
 
 
    const auto& by_witness_name_idx = db().get_index_type< witness_index >().indices().get< by_name >();
@@ -59,7 +59,7 @@ void witness_update_evaluator::do_apply( const witness_update_operation& o )
 
 void account_create_evaluator::do_apply( const account_create_operation& o )
 {
-   if ( o.json_metadata.size() > 0 )
+   if ( o.json_metadata.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
@@ -69,7 +69,7 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
    const auto& props = db().get_dynamic_global_properties();
 
    if( db().head_block_num() > 0 ){
-      FC_ASSERT( creator.balance >= o.fee, "Isufficient balance to create account", ( "creator.balance", creator.balance )( "required", o.fee ) );
+      FC_ASSERT( creator.balance >= o.fee, "Insufficient balance to create account", ( "creator.balance", creator.balance )( "required", o.fee ) );
 
       const witness_schedule_object& wso = db().get_witness_schedule_object();
       FC_ASSERT( o.fee >= wso.median_props.account_creation_fee, "Insufficient Fee: ${f} required, ${p} provided",
@@ -104,10 +104,92 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
       db().create_vesting( new_account, o.fee );
 }
 
+void account_create_with_delegation_evaluator::do_apply( const account_create_with_delegation_operation& o )
+{
+   auto& _db = db();
+
+   FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Account creation with delegation is only allowed after hardfork 0.4" );
+
+   const auto& creator = _db.get_account( o.creator );
+   const auto& props = _db.get_dynamic_global_properties();
+   const witness_schedule_object& wso = _db.get_witness_schedule_object();
+
+   FC_ASSERT( creator.balance >= o.fee, "Insufficient balance to create account.",
+               ( "creator.balance", creator.balance )
+               ( "required", o.fee ) );
+
+   FC_ASSERT( creator.vesting_shares - creator.delegated_vesting_shares - asset( creator.to_withdraw - creator.withdrawn, VESTS_SYMBOL ) >= o.delegation, "Insufficient vesting shares to delegate to new account.",
+               ( "creator.vesting_shares", creator.vesting_shares )
+               ( "creator.delegated_vesting_shares", creator.delegated_vesting_shares )( "required", o.delegation ) );
+
+   auto target_delegation = asset( wso.median_props.account_creation_fee.amount * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO, MUSE_SYMBOL ) * props.get_vesting_share_price();
+
+   auto current_delegation = asset( o.fee.amount * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO, MUSE_SYMBOL ) * props.get_vesting_share_price() + o.delegation;
+
+   FC_ASSERT( current_delegation >= target_delegation, "Insufficient delegation ${f} required, ${p} provided.",
+               ("f", target_delegation )
+               ( "p", current_delegation )
+               ( "account_creation_fee", wso.median_props.account_creation_fee )
+               ( "o.fee", o.fee )
+               ( "o.delegation", o.delegation ) );
+
+   for( const auto& a : o.owner.account_auths )
+   {
+      _db.get_account( a.first );
+   }
+
+   for( const auto& a : o.active.account_auths )
+   {
+      _db.get_account( a.first );
+   }
+
+   for( const auto& a : o.basic.account_auths )
+   {
+      _db.get_account( a.first );
+   }
+
+   _db.modify( creator, [&o]( account_object& c )
+   {
+      c.balance -= o.fee;
+      c.delegated_vesting_shares += o.delegation;
+   });
+
+   const auto& new_account = _db.create< account_object >( [&o,&props]( account_object& acc )
+   {
+      acc.name = o.new_account_name;
+      acc.owner = o.owner;
+      acc.active = o.active;
+      acc.basic = o.basic;
+      acc.memo_key = o.memo_key;
+      acc.last_owner_update = fc::time_point_sec::min();
+      acc.created = props.time;
+      acc.last_vote_time = props.time;
+      acc.mined = false;
+      acc.received_vesting_shares = o.delegation;
+
+      #ifndef IS_LOW_MEM
+         acc.json_metadata = o.json_metadata;
+      #endif
+   });
+
+   if( o.delegation.amount > 0 )
+   {
+      _db.create< vesting_delegation_object >( [&o,&_db]( vesting_delegation_object& vdo )
+      {
+         vdo.delegator = o.creator;
+         vdo.delegatee = o.new_account_name;
+         vdo.vesting_shares = o.delegation;
+         vdo.min_delegation_time = _db.head_block_time() + MUSE_CREATE_ACCOUNT_DELEGATION_TIME;
+      });
+   }
+
+   if( o.fee.amount > 0 )
+      _db.create_vesting( new_account, o.fee );
+}
 
 void account_update_evaluator::do_apply( const account_update_operation& o )
 {
-   if ( o.json_metadata.size() > 0 )
+   if ( o.json_metadata.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
    }
@@ -149,7 +231,7 @@ void account_update_evaluator::do_apply( const account_update_operation& o )
 
 void escrow_transfer_evaluator::do_apply( const escrow_transfer_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow transfer operation not enabled" );
+   FC_ASSERT( false, "Escrow transfer operation not enabled" ); // TODO: move to validate after HF
 
    const auto& from_account = db().get_account(o.from);
    db().get_account(o.to);
@@ -177,7 +259,7 @@ try {
 
 void escrow_dispute_evaluator::do_apply( const escrow_dispute_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow dispute operation not enabled" );
+   FC_ASSERT( false, "Escrow dispute operation not enabled" ); // TODO: move to validate after HF
    db().get_account(o.from); // check if it exists
 
    const auto& e = db().get_escrow( o.from, o.escrow_id );
@@ -191,7 +273,7 @@ try {
 
 void escrow_release_evaluator::do_apply( const escrow_release_operation& o ) {
 try {
-   FC_ASSERT( false, "Escrow release operation not enabled" );
+   FC_ASSERT( false, "Escrow release operation not enabled" ); // TODO: move to validate after HF
    db().get_account(o.from); // check if it exists
    const auto& to_account = db().get_account(o.to);
    db().get_account(o.who); // check if it exists
@@ -241,42 +323,6 @@ void transfer_evaluator::do_apply( const transfer_operation& o )
 
    } else {
       FC_ASSERT( false , "transferring of Vestings (VEST) is not allowed." );
-#if 0
-      /** allow transfer of vesting balance if the full balance is transferred to a new account
-       *  This will allow combining of VESTS but not division of VESTS
-       **/
-      FC_ASSERT( db().get_balance( from_account, o.amount.symbol ) == o.amount );
-
-      db().modify( to_account, [&]( account_object& a ){
-          a.vesting_shares += o.amount;
-          a.voting_power = std::min( to_account.voting_power, from_account.voting_power );
-
-          // Update to_account bandwidth. from_account bandwidth is already updated as a result of the transfer op
-          /*
-          auto now = db().head_block_time();
-          auto delta_time = (now - a.last_bandwidth_update).to_seconds();
-          uint64_t N = trx_size * MUSE_BANDWIDTH_PRECISION;
-          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
-             a.average_bandwidth = N;
-          else
-          {
-             auto old_weight = a.average_bandwidth * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time);
-             auto new_weight = delta_time * N;
-             a.average_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
-          }
-
-          a.average_bandwidth += from_account.average_bandwidth;
-          a.last_bandwidth_update = now;
-          */
-
-          db().adjust_proxied_witness_votes( a, o.amount.amount, 0 );
-      });
-
-      db().modify( from_account, [&]( account_object& a ){
-          db().adjust_proxied_witness_votes( a, -o.amount.amount, 0 );
-          a.vesting_shares -= o.amount;
-      });
-#endif
    }
 }
 
@@ -294,11 +340,13 @@ void withdraw_vesting_evaluator::do_apply( const withdraw_vesting_operation& o )
 {
     const auto& account = db().get_account( o.account );
 
-    if( db().head_block_time() > fc::time_point::now() - fc::seconds(15) ) // SOFT FORK
+    const auto now = db().head_block_time();
+    if( now > fc::time_point::now() - fc::seconds(15) // SOFT FORK
+          || db().has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to withdraw_vesting_operation::validate after hf
        FC_ASSERT( o.vesting_shares.amount >= 0, "Cannot withdraw a negative amount of VESTS!" );
 
     FC_ASSERT( account.vesting_shares >= asset( 0, VESTS_SYMBOL ) );
-    FC_ASSERT( account.vesting_shares >= o.vesting_shares );
+    FC_ASSERT( account.vesting_shares - account.delegated_vesting_shares >= o.vesting_shares, "Account does not have sufficient Steem Power for withdraw." );
 
     if( !account.mined )  {
       const auto& props = db().get_dynamic_global_properties();
@@ -314,10 +362,10 @@ void withdraw_vesting_evaluator::do_apply( const withdraw_vesting_operation& o )
 
 
     if( o.vesting_shares.amount <= 0 ) {
-       if( o.vesting_shares.amount == 0 ) // SOFT FORK
+       if( o.vesting_shares.amount == 0 ) // SOFT FORK, remove after HF 4
        FC_ASSERT( account.vesting_withdraw_rate.amount  != 0, "this operation would not change the vesting withdraw rate" );
 
-       db().modify( account, [&]( account_object& a ) {
+       db().modify( account, []( account_object& a ) {
          a.vesting_withdraw_rate = asset( 0, VESTS_SYMBOL );
          a.next_vesting_withdrawal = time_point_sec::maximum();
          a.to_withdraw = 0;
@@ -325,17 +373,17 @@ void withdraw_vesting_evaluator::do_apply( const withdraw_vesting_operation& o )
        });
     }
     else {
-       db().modify( account, [&]( account_object& a ) {
+       db().modify( account, [&o,&now]( account_object& a ) {
          auto new_vesting_withdraw_rate = asset( o.vesting_shares.amount / MUSE_VESTING_WITHDRAW_INTERVALS, VESTS_SYMBOL );
 
          if( new_vesting_withdraw_rate.amount == 0 )
             new_vesting_withdraw_rate.amount = 1;
 
-         FC_ASSERT( account.vesting_withdraw_rate  != new_vesting_withdraw_rate, "this operation would not change the vesting withdraw rate" );
+         FC_ASSERT( a.vesting_withdraw_rate != new_vesting_withdraw_rate, "this operation would not change the vesting withdraw rate" );
 
          a.vesting_withdraw_rate = new_vesting_withdraw_rate;
 
-         a.next_vesting_withdrawal = db().head_block_time() + fc::seconds(MUSE_VESTING_WITHDRAW_INTERVAL_SECONDS);
+         a.next_vesting_withdrawal = now + fc::seconds(MUSE_VESTING_WITHDRAW_INTERVAL_SECONDS);
          a.to_withdraw = o.vesting_shares.amount;
          a.withdrawn = 0;
        });
@@ -422,7 +470,7 @@ void account_witness_proxy_evaluator::do_apply( const account_witness_proxy_oper
       proxy_chain.reserve( MUSE_MAX_PROXY_RECURSION_DEPTH + 1 );
 
       /// check for proxy loops and fail to update the proxy if it would create a loop
-      auto cprox = &new_proxy;
+      auto* cprox = &new_proxy;
       while( cprox->proxy.size() != 0 ) {
          const auto& next_proxy = db().get_account( cprox->proxy );
          FC_ASSERT( proxy_chain.insert( next_proxy.get_id() ).second, "Attempt to create a proxy loop" );
@@ -487,14 +535,11 @@ void account_witness_vote_evaluator::do_apply( const account_witness_vote_operat
    }
 }
 
-
-
-
 void custom_evaluator::do_apply( const custom_operation& o ){}
 
 void custom_json_evaluator::do_apply( const custom_json_operation& o )
 {
-   if ( o.json.size() > 0 )
+   if ( o.json.size() > 0 ) // TODO: move to validate after HF
    {
       FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
    }
@@ -593,26 +638,7 @@ void limit_order_cancel_evaluator::do_apply( const limit_order_cancel_operation&
 void report_over_production_evaluator::do_apply( const report_over_production_operation& o )
 {
    FC_ASSERT( !db().is_producing(), "this operation is currently disabled" );
-   FC_ASSERT( false , "this operation is disabled" );
-
-   /*
-   const auto& reporter = db().get_account( o.reporter );
-   const auto& violator = db().get_account( o.first_block.witness );
-   const auto& witness  = db().get_witness( o.first_block.witness );
-   FC_ASSERT( violator.vesting_shares.amount > 0, "violator has no vesting shares, must have already been reported" );
-   FC_ASSERT( (db().head_block_num() - o.first_block.block_num()) < MUSE_MAX_MINERS, "must report within one round" );
-   FC_ASSERT( (db().head_block_num() - witness.last_confirmed_block_num) < MUSE_MAX_MINERS, "must report within one round" );
-   FC_ASSERT( public_key_type(o.first_block.signee()) == witness.signing_key );
-
-   db().modify( reporter, [&]( account_object& a ){
-       a.vesting_shares += violator.vesting_shares;
-       db().adjust_proxied_witness_votes( a, violator.vesting_shares.amount, 0 );
-   });
-   db().modify( violator, [&]( account_object& a ){
-       db().adjust_proxied_witness_votes( a, -a.vesting_shares.amount, 0 );
-       a.vesting_shares.amount = 0;
-   });
-   */
+   FC_ASSERT( false , "this operation is disabled" ); // TODO: move to validate after HF
 }
 
 void challenge_authority_evaluator::do_apply( const challenge_authority_operation& o )
@@ -775,6 +801,113 @@ void change_recovery_account_evaluator::do_apply( const change_recovery_account_
    else // Request exists and changing back to current recovery account
    {
       db().remove( *request );
+   }
+}
+
+void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_operation& op )
+{
+   auto& _db = db();
+
+   FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Vesting delegation is only allowed after hardfork 0.4" );
+
+   const auto& delegator = _db.get_account( op.delegator );
+   const auto& delegatee = _db.get_account( op.delegatee );
+   const auto& delegation_idx = db().get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
+   auto delegation = delegation_idx.find( boost::make_tuple( op.delegator, op.delegatee ) );
+
+   auto available_shares = delegator.vesting_shares - delegator.delegated_vesting_shares - asset( delegator.to_withdraw - delegator.withdrawn, VESTS_SYMBOL );
+
+   const auto& wso = _db.get_witness_schedule_object();
+   const auto& gpo = _db.get_dynamic_global_properties();
+
+   auto min_delegation = asset( wso.median_props.account_creation_fee.amount * 10, MUSE_SYMBOL ) * gpo.get_vesting_share_price();
+   auto min_update = wso.median_props.account_creation_fee * gpo.get_vesting_share_price();
+
+   // If delegation doesn't exist, create it
+   if( delegation == delegation_idx.end() )
+   {
+      FC_ASSERT( available_shares >= op.vesting_shares, "Account does not have enough vesting shares to delegate." );
+      FC_ASSERT( op.vesting_shares >= min_delegation, "Account must delegate a minimum of ${v}", ("v", min_delegation) );
+
+      _db.create< vesting_delegation_object >( [&op,&_db]( vesting_delegation_object& obj )
+      {
+         obj.delegator = op.delegator;
+         obj.delegatee = op.delegatee;
+         obj.vesting_shares = op.vesting_shares;
+         obj.min_delegation_time = _db.head_block_time();
+      });
+
+      _db.modify( delegator, [&op]( account_object& a )
+      {
+         a.delegated_vesting_shares += op.vesting_shares;
+      });
+
+      _db.modify( delegatee, [&op]( account_object& a )
+      {
+         a.received_vesting_shares += op.vesting_shares;
+      });
+   }
+   // Else if the delegation is increasing
+   else if( op.vesting_shares >= delegation->vesting_shares )
+   {
+      auto delta = op.vesting_shares - delegation->vesting_shares;
+
+      FC_ASSERT( delta >= min_update, "Steem Power increase is not enough of a difference. min_update: ${min}", ("min", min_update) );
+      FC_ASSERT( available_shares >= op.vesting_shares - delegation->vesting_shares, "Account does not have enough vesting shares to delegate." );
+
+      _db.modify( delegator, [delta]( account_object& a )
+      {
+         a.delegated_vesting_shares += delta;
+      });
+
+      _db.modify( delegatee, [delta]( account_object& a )
+      {
+         a.received_vesting_shares += delta;
+      });
+
+      _db.modify( *delegation, [&op]( vesting_delegation_object& obj )
+      {
+         obj.vesting_shares = op.vesting_shares;
+      });
+   }
+   // Else the delegation is decreasing
+   else /* delegation->vesting_shares > op.vesting_shares */
+   {
+      auto delta = delegation->vesting_shares - op.vesting_shares;
+
+      if( op.vesting_shares.amount > 0 )
+      {
+         FC_ASSERT( delta >= min_update, "Steem Power decrease is not enough of a difference. min_update: ${min}", ("min", min_update) );
+         FC_ASSERT( op.vesting_shares >= min_delegation, "Delegation must be removed or leave minimum delegation amount of ${v}", ("v", min_delegation) );
+      }
+      else
+      {
+         FC_ASSERT( delegation->vesting_shares.amount > 0, "Delegation would set vesting_shares to zero, but it is already zero");
+      }
+
+      _db.create< vesting_delegation_expiration_object >( [&_db,&op,&gpo,&delegation,delta]( vesting_delegation_expiration_object& obj )
+      {
+         obj.delegator = op.delegator;
+         obj.vesting_shares = delta;
+         obj.expiration = std::max( _db.head_block_time() + gpo.delegation_return_period, delegation->min_delegation_time );
+      });
+
+      _db.modify( delegatee, [delta]( account_object& a )
+      {
+         a.received_vesting_shares -= delta;
+      });
+
+      if( op.vesting_shares.amount > 0 )
+      {
+         _db.modify( *delegation, [&op]( vesting_delegation_object& obj )
+         {
+            obj.vesting_shares = op.vesting_shares;
+         });
+      }
+      else
+      {
+         _db.remove( *delegation );
+      }
    }
 }
 

@@ -75,7 +75,7 @@ void block_database::remove( const block_id_type& id )
    index_entry e;
    auto index_pos = sizeof(e)*block_header::num_from_id(id);
    _block_num_to_pos.seekg( 0, _block_num_to_pos.end );
-   if ( _block_num_to_pos.tellg() <= index_pos )
+   if ( (size_t)_block_num_to_pos.tellg() <= index_pos )
       FC_THROW_EXCEPTION(fc::key_not_found_exception, "Block ${id} not contained in block database", ("id", id));
 
    _block_num_to_pos.seekg( index_pos );
@@ -97,7 +97,7 @@ bool block_database::contains( const block_id_type& id )const
    index_entry e;
    auto index_pos = sizeof(e)*block_header::num_from_id(id);
    _block_num_to_pos.seekg( 0, _block_num_to_pos.end );
-   if ( _block_num_to_pos.tellg() < index_pos + sizeof(e) )
+   if ( (size_t)_block_num_to_pos.tellg() < index_pos + sizeof(e) )
       return false;
    _block_num_to_pos.seekg( index_pos );
    _block_num_to_pos.read( (char*)&e, sizeof(e) );
@@ -128,7 +128,7 @@ optional<signed_block> block_database::fetch_optional( const block_id_type& id )
       index_entry e;
       auto index_pos = sizeof(e)*block_header::num_from_id(id);
       _block_num_to_pos.seekg( 0, _block_num_to_pos.end );
-      if ( _block_num_to_pos.tellg() <= index_pos )
+      if ( (size_t)_block_num_to_pos.tellg() <= index_pos )
          return {};
 
       _block_num_to_pos.seekg( index_pos );
@@ -160,7 +160,7 @@ optional<signed_block> block_database::fetch_by_number( uint32_t block_num )cons
       index_entry e;
       auto index_pos = sizeof(e)*block_num;
       _block_num_to_pos.seekg( 0, _block_num_to_pos.end );
-      if ( _block_num_to_pos.tellg() <= index_pos )
+      if ( (size_t)_block_num_to_pos.tellg() <= index_pos )
          return {};
 
       _block_num_to_pos.seekg( index_pos, _block_num_to_pos.beg );
@@ -189,7 +189,7 @@ optional<index_entry> block_database::last_index_entry()const {
 
       _block_num_to_pos.seekg( 0, _block_num_to_pos.end );
       std::streampos pos = _block_num_to_pos.tellg();
-      if( pos < sizeof(index_entry) )
+      if( (size_t)pos < sizeof(index_entry) )
          return optional<index_entry>();
 
       pos -= pos % sizeof(index_entry);
@@ -202,7 +202,7 @@ optional<index_entry> block_database::last_index_entry()const {
          _block_num_to_pos.seekg( pos );
          _block_num_to_pos.read( (char*)&e, sizeof(e) );
          if( _block_num_to_pos.gcount() == sizeof(e) && e.block_size > 0
-                && e.block_pos + e.block_size <= blocks_size )
+                && e.block_pos + e.block_size <= (size_t)blocks_size )
             try
             {
                vector<char> data( e.block_size );

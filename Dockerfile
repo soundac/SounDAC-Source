@@ -22,16 +22,25 @@ RUN \
       cmake \
       git \
       libbz2-dev \
-      libreadline-dev \
-      libboost-all-dev \
       libcurl4-openssl-dev \
       libssl-dev \
       libncurses-dev \
+      libboost-thread-dev \
+      libboost-iostreams-dev \
+      libboost-date-time-dev \
+      libboost-system-dev \
+      libboost-filesystem-dev \
+      libboost-program-options-dev \
+      libboost-chrono-dev \
+      libboost-test-dev \
+      libboost-context-dev \
+      libboost-regex-dev \
+      libboost-coroutine-dev \
+      libtool \
       doxygen \
       ca-certificates \
+      fish \
     && \
-    apt-get update -y && \
-    apt-get install -y fish && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -84,5 +93,6 @@ COPY --from=build /entrypoint.sh /entrypoint.sh
 COPY --from=build /etc/SounDAC/config.ini /etc/SounDAC/config.ini
 COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
 COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
+COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
 COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
 COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key

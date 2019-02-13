@@ -5,7 +5,7 @@
 
 #define IS_TEST_NET
 
-#define MUSE_BLOCKCHAIN_VERSION              ( version(0, 3, 2) )
+#define MUSE_BLOCKCHAIN_VERSION              ( version(0, 4, 0) )
 #define MUSE_BLOCKCHAIN_HARDFORK_VERSION     ( hardfork_version( MUSE_BLOCKCHAIN_VERSION ) )
 
 #ifdef IS_TEST_NET // This is the muse test net mode. Some feature may behave differently
@@ -183,6 +183,9 @@
 #define MUSE_MIN_ACCOUNT_NAME_LENGTH          3
 #define MUSE_MAX_ACCOUNT_NAME_LENGTH         16
 
+#define MUSE_CREATE_ACCOUNT_DELEGATION_RATIO    5
+#define MUSE_CREATE_ACCOUNT_DELEGATION_TIME     fc::days(30)
+
 #define MUSE_MIN_PERMLINK_LENGTH             0
 #define MUSE_MAX_PERMLINK_LENGTH             256
 #define MUSE_MAX_WITNESS_URL_LENGTH          2048
@@ -217,7 +220,7 @@
 #define MUSE_MAX_ASSET_WHITELIST_AUTHORITIES 10
 #define MUSE_MAX_URL_LENGTH                  127
 
-#define GRAPHENE_CURRENT_DB_VERSION             "MUSE_0_3_1"
+#define GRAPHENE_CURRENT_DB_VERSION          "MUSE_0_4_0"
 
 #define MUSE_IRREVERSIBLE_THRESHOLD          (51 * MUSE_1_PERCENT)
 
@@ -237,5 +240,7 @@
 
 #define MUSE_1ST_LEVEL_SCORING_PERCENTAGE 50
 #define MUSE_2ST_LEVEL_SCORING_PERCENTAGE 10
+
+#define MUSE_DELEGATION_RETURN_PERIOD     (60*60*24*7)  /// 7 days
 
 #define GRAPHENE_MAX_NESTED_OBJECTS (200)

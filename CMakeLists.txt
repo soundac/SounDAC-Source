@@ -45,8 +45,7 @@ LIST(APPEND BOOST_COMPONENTS thread
                              program_options
                              chrono
                              unit_test_framework
-                             context
-                             locale)
+                             context)
 SET( Boost_USE_STATIC_LIBS ON CACHE STRING "ON or OFF" )
 
 OPTION( ENABLE_CONTENT_PATCHING "Allow posts to be updated with a patch rather than replaced, Requires Qt5" ON )

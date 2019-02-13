@@ -952,7 +952,6 @@ void application::shutdown_plugins()
 {
    for( auto& entry : my->_plugins_enabled )
       entry.second->plugin_shutdown();
-   return;
 }
 void application::shutdown()
 {
@@ -968,7 +967,8 @@ void application::register_abstract_plugin( std::shared_ptr< abstract_plugin > p
 {
    plug->plugin_set_app(this);
 
-   boost::program_options::options_description plugin_cli_options("Options for plugin " + plug->plugin_name()), plugin_cfg_options;
+   boost::program_options::options_description plugin_cli_options("Options for plugin " + plug->plugin_name());
+   boost::program_options::options_description plugin_cfg_options;
    plug->plugin_set_program_options(plugin_cli_options, plugin_cfg_options);
    if( !plugin_cli_options.options().empty() )
       _cli_options.add(plugin_cli_options);
@@ -1008,14 +1008,12 @@ void application::initialize_plugins( const boost::program_options::variables_ma
       ilog( "Initializing plugin ${name}", ("name", entry.first) );
       entry.second->plugin_initialize( options );
    }
-   return;
 }
 
 void application::startup_plugins()
 {
    for( auto& entry : my->_plugins_enabled )
       entry.second->plugin_startup();
-   return;
 }
 
 // namespace detail
