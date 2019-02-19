@@ -2058,6 +2058,21 @@ annotated_signed_transaction wallet_api::set_withdraw_vesting_route( string from
    return my->sign_transaction( tx, broadcast );
 }
 
+annotated_signed_transaction wallet_api::delegate_vesting_shares(string from, string to, asset vesting_shares, bool broadcast )
+{
+   FC_ASSERT( !is_locked() );
+    delegate_vesting_shares_operation op;
+    op.delegator = from;
+    op.delegatee = to;
+    op.vesting_shares = vesting_shares;
+
+    signed_transaction tx;
+    tx.operations.push_back( op );
+    tx.validate();
+
+   return my->sign_transaction( tx, broadcast );
+}
+
 annotated_signed_transaction wallet_api::convert_mbd(string from, asset amount, bool broadcast )
 {
    FC_ASSERT( !is_locked() );
