@@ -27,7 +27,7 @@ my $req = HTTP::Request->new("POST", $main::FAUCET_URL);
 $req->header("Content-Type" => "application/json");
 my $json = JSON->new;
 $req->content($json->encode({id => 0,
-			     method => "create_account_with_keys",
+			     method => "create_account_with_delegation",
 			     params => ["faucet",
 				        $main::Q->param('name'),
 					"",
