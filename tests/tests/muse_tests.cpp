@@ -661,20 +661,6 @@ BOOST_AUTO_TEST_CASE( simple_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, alice_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, priscilla_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, cora_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, coreen_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 7200, colette_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 3600, cora_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 1800, coreen_id(db).total_listening_time );
@@ -751,20 +737,6 @@ BOOST_AUTO_TEST_CASE( simple_test )
       BOOST_CHECK_EQUAL( 100000, coreen_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
-
-      BOOST_CHECK_EQUAL( 0, alice_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, priscilla_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, cora_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, coreen_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
 
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 0, cora_id(db).total_listening_time );
@@ -1052,16 +1024,6 @@ BOOST_AUTO_TEST_CASE( multi_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 3600, colette_id(db).total_listening_time );
 
       generate_blocks( db.head_block_time() + 86400 - MUSE_BLOCK_INTERVAL );
@@ -1117,16 +1079,6 @@ BOOST_AUTO_TEST_CASE( multi_test )
       BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
-
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
 
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
       }
@@ -1298,13 +1250,6 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
       BOOST_CHECK_EQUAL( 100000, muriel_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 86400, colette_id(db).total_listening_time );
 
       asset daily_content_reward = db.get_content_reward();
@@ -1347,13 +1292,6 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
       BOOST_CHECK_EQUAL( 100000, martha_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, muriel_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
-
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
 
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
 
