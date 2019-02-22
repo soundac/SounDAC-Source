@@ -163,7 +163,6 @@ void account_create_with_delegation_evaluator::do_apply( const account_create_wi
       acc.last_owner_update = fc::time_point_sec::min();
       acc.created = props.time;
       acc.last_vote_time = props.time;
-      acc.mined = false;
       acc.received_vesting_shares = o.delegation;
 
       #ifndef IS_LOW_MEM
