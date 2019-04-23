@@ -1534,6 +1534,35 @@ annotated_signed_transaction wallet_api::create_account_with_keys( string creato
    return my->sign_transaction( tx, broadcast );
 } FC_CAPTURE_AND_RETHROW( (creator)(new_account_name)(json_meta)(owner)(active)(memo)(broadcast) ) }
 
+annotated_signed_transaction wallet_api::create_account_with_delegation( string creator,
+                                      string new_account_name,
+                                      string json_meta,
+                                      public_key_type owner,
+                                      public_key_type active,
+                                      public_key_type basic,
+                                      public_key_type memo,
+                                      bool broadcast )const
+{ try {
+   FC_ASSERT( !is_locked() );
+   account_create_with_delegation_operation op;
+   op.creator = creator;
+   op.new_account_name = new_account_name;
+   op.owner = authority( 1, owner, 1 );
+   op.active = authority( 1, active, 1 );
+   op.basic = authority( 1, basic, 1 );
+   op.memo_key = memo;
+   op.json_metadata = json_meta;
+   op.delegation = my->_remote_db->get_chain_properties().account_creation_fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO
+                   * my->_remote_db->get_dynamic_global_properties().get_vesting_share_price();
+   op.delegation.amount += op.delegation.amount.value >> 4;
+
+   signed_transaction tx;
+   tx.operations.push_back(op);
+   tx.validate();
+
+   return my->sign_transaction( tx, broadcast );
+} FC_CAPTURE_AND_RETHROW( (creator)(new_account_name)(json_meta)(owner)(active)(memo)(broadcast) ) }
+
 annotated_signed_transaction wallet_api::request_account_recovery( string recovery_account, string account_to_recover, authority new_authority, bool broadcast )
 {
    FC_ASSERT( !is_locked() );
@@ -2021,6 +2050,21 @@ annotated_signed_transaction wallet_api::set_withdraw_vesting_route( string from
     op.to_account = to;
     op.percent = percent;
     op.auto_vest = auto_vest;
+
+    signed_transaction tx;
+    tx.operations.push_back( op );
+    tx.validate();
+
+   return my->sign_transaction( tx, broadcast );
+}
+
+annotated_signed_transaction wallet_api::delegate_vesting_shares(string from, string to, asset vesting_shares, bool broadcast )
+{
+   FC_ASSERT( !is_locked() );
+    delegate_vesting_shares_operation op;
+    op.delegator = from;
+    op.delegatee = to;
+    op.vesting_shares = vesting_shares;
 
     signed_transaction tx;
     tx.operations.push_back( op );
