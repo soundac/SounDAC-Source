@@ -39,7 +39,6 @@ void block_info_api_impl::get_block_info( const get_block_info_args& args, std::
    uint32_t n = std::min( uint32_t( _block_info.size() ), args.start_block_num + args.count );
    for( uint32_t block_num=args.start_block_num; block_num<n; block_num++ )
       result.emplace_back( _block_info[block_num] );
-   return;
 }
 
 void block_info_api_impl::get_blocks_with_info( const get_block_info_args& args, std::vector< block_with_info >& result )
@@ -56,7 +55,6 @@ void block_info_api_impl::get_blocks_with_info( const get_block_info_args& args,
       result.back().block = *db.fetch_block_by_number(block_num);
       result.back().info = _block_info[block_num];
    }
-   return;
 }
 
 } // detail

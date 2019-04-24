@@ -70,10 +70,15 @@ class database_api_impl : public std::enable_shared_from_this<database_api_impl>
       set<string> lookup_streaming_platform_accounts(const string& lower_bound_name, uint32_t limit)const;
       bool is_streaming_platform(string straming_platform)const;
       //content
-      vector<report_object> get_reports_for_account(string consumer)const; 
+      vector<report_object> get_reports_for_account(string consumer)const;
       vector<content_object> get_content_by_uploader(string author)const;
       optional<content_object>    get_content_by_url(string url)const;
-      vector<content_object>  lookup_content(const string& start, uint32_t limit )const;
+      vector<content_object> lookup_content(const string& start, uint32_t limit )const;
+      vector<content_object> list_content_by_latest( const content_id_type start, uint16_t limit )const;
+      vector<content_object> list_content_by_genre( uint32_t genre, const content_id_type start, uint16_t limit )const;
+      vector<content_object> list_content_by_category( const string& category, const content_id_type bound, uint16_t limit )const;
+      vector<content_object> list_content_by_uploader( const string& uploader, const object_id_type bound, uint16_t limit )const;
+
       //scoring
       uint64_t get_account_scoring( string account );
       uint64_t get_content_scoring( string content );
@@ -392,7 +397,7 @@ vector< extended_account > database_api_impl::get_accounts( const vector< string
       auto itr = idx.find( name );
       if ( itr == idx.end() ) continue;
 
-      results.push_back( *itr );
+      results.push_back( extended_account( *itr ) );
       results.back().muse_power = itr->vesting_shares * vesting_price;
 
       auto vitr = vidx.lower_bound( boost::make_tuple( itr->get_id(), witness_id_type() ) );
@@ -556,7 +561,6 @@ vector<proposal_object> database_api_impl::get_proposed_transactions( string id 
    
    idx.inspect_all_objects( [&](const object& obj){
            const proposal_object& p = static_cast<const proposal_object&>(obj);
-           //result.push_back(p);
            if( p.required_active_approvals.find( id ) != p.required_active_approvals.end() )
               result.push_back(p);
            else if ( p.required_owner_approvals.find( id ) != p.required_owner_approvals.end() )
@@ -775,10 +779,10 @@ vector<content_object> database_api::get_content_by_uploader(string author)const
 
 vector<content_object> database_api_impl::get_content_by_uploader(string uploader)const
 {
-   const auto& idx= _db.get_index_type<content_index>().indices().get< by_uploader_url >();
+   const auto& idx= _db.get_index_type<content_index>().indices().get< by_uploader >();
    vector <content_object> result;
     
-   auto itr = idx.lower_bound( std::make_tuple( uploader, "") );
+   auto itr = idx.lower_bound( std::make_tuple( uploader, content_id_type(-1) ) );
    while( itr != idx.end() && itr->uploader == uploader && result.size() < 1000 )
    {
       result.push_back (*itr);
@@ -824,6 +828,116 @@ vector<content_object>  database_api_impl::lookup_content(const string& start, u
    return result;
 }
 
+vector<content_object> database_api::list_content_by_latest( const string& start, uint16_t limit )const
+{
+   if( start.empty() )
+      return my->list_content_by_latest( content_id_type(), limit );
+   return my->list_content_by_latest( fc::variant(start, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_latest( const content_id_type start, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type<content_index>().indices().get<by_id>();
+   auto itr = (start.instance.value > 0 ? idx.upper_bound( start ) : idx.end());
+   if( itr == idx.begin() ) return result;
+   if( start.instance.value > 0 )
+   {
+      --itr;
+      if( itr->id != start ) itr++;
+   }
+   while( itr != idx.begin() && result.size() < limit )
+      result.push_back( *--itr );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_genre( uint32_t genre, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_genre( genre, content_id_type(), limit );
+   return my->list_content_by_genre( genre, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_genre( uint32_t genre, const content_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type< primary_index< content_index > >();
+   const content_by_genre_index& by_genre = idx.get_secondary_index<muse::chain::content_by_genre_index>();
+   const set< content_id_type > ids = by_genre.find_by_genre( genre );
+   auto itr = (bound.instance.value > 0 ? ids.upper_bound( bound ) : ids.end());
+   if( itr == ids.begin() ) return result;
+   if( bound.instance.value > 0 )
+   {
+      --itr;
+      if( *itr != bound ) itr++;
+   }
+   while( itr != ids.begin() && result.size() < limit )
+      result.push_back( (*--itr)(_db) );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_category( const string& category, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_category( category, content_id_type(), limit );
+   return my->list_content_by_category( category, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_category( const string& category, const content_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type< primary_index< content_index > >();
+   const content_by_category_index& by_category = idx.get_secondary_index<muse::chain::content_by_category_index>();
+   const set< content_id_type > ids = by_category.find_by_category( category );
+   auto itr = (bound.instance.value > 0 ? ids.upper_bound( bound ) : ids.end());
+   if( itr == ids.begin() ) return result;
+   if( bound.instance.value > 0 )
+   {
+      --itr;
+      if( *itr != bound ) itr++;
+   }
+   while( itr != ids.begin() && result.size() < limit )
+      result.push_back( (*--itr)(_db) );
+
+   return result;
+}
+
+vector<content_object> database_api::list_content_by_uploader( const string& uploader, const string& bound, uint16_t limit )const
+{
+   if( bound.empty() )
+      return my->list_content_by_uploader( uploader, content_id_type(), limit );
+   return my->list_content_by_uploader( uploader, fc::variant(bound, 1).as<content_id_type>(1), limit );
+}
+
+vector<content_object> database_api_impl::list_content_by_uploader( const string& uploader, const object_id_type bound, uint16_t limit )const
+{
+   FC_ASSERT( limit <= 100 );
+
+   vector<content_object> result;
+   result.reserve( limit );
+   const auto& idx = _db.get_index_type<content_index>().indices().get<by_uploader>();
+   auto itr = idx.lower_bound( boost::make_tuple( uploader, bound.instance() > 0 ? bound : object_id_type(content_id_type((1ULL<<48)-1)) ) );
+   if( itr == idx.end() ) return result;
+   if( bound.instance() > 0 )
+   {
+      if( itr->id == bound ) itr++;
+   }
+   while( itr != idx.end() && itr->uploader == uploader && result.size() < limit )
+      result.push_back( *itr++ );
+
+   return result;
+}
 
 //////////////////////////////////////////////////////////////////////
 //                                                                  //
@@ -841,7 +955,7 @@ vector<extended_limit_order> database_api::get_open_orders( string owner )const 
    const auto& idx = my->_db.get_index_type<limit_order_index>().indices().get<by_account>();
    auto itr = idx.lower_bound( owner );
    while( itr != idx.end() && itr->seller == owner ) {
-      result.push_back( *itr );
+      result.push_back( extended_limit_order( *itr ) );
 
       if( itr->sell_price.base.asset_id == MUSE_SYMBOL )
          result.back().real_price = (result.back().sell_price).to_real();
@@ -1133,7 +1247,8 @@ bool database_api_impl::verify_authority( const signed_transaction& trx )const
                          [&]( string account_name ){ return &_db.get_account( account_name ).basic; },
                          [&]( string content_url ){ return &_db.get_content( content_url ).manage_master; },
                          [&]( string content_url ){ return &_db.get_content( content_url ).manage_comp; },
-                         !_db.has_hardfork( MUSE_HARDFORK_0_3 ) ? 1 : 2 );
+                         _db.has_hardfork( MUSE_HARDFORK_0_4 ) ? 3 :
+                         _db.has_hardfork( MUSE_HARDFORK_0_3 ) ? 2 : 1 );
    return true;
 }
 
@@ -1214,154 +1329,6 @@ vector<string> database_api::get_active_witnesses()const {
 vector<string> database_api::get_voted_streaming_platforms()const {
    return my->_db.get_voted_streaming_platforms();
 }
-
-
-/*state database_api::get_state( string path )const
-{
-   state _state;
-   _state.props         = get_dynamic_global_properties();
-   _state.current_route = path;
-   _state.feed_price    = get_current_median_history_price();
-
-   try {
-   if( path.size() && path[0] == '/' )
-      path = path.substr(1); /// remove '/' from front
-
-   if( !path.size() )
-      path = "trending";
-
-   set<string> accounts;
-
-   vector<string> part; part.reserve(4);
-   boost::split( part, path, boost::is_any_of("/") );
-   part.resize(std::max( part.size(), size_t(4) ) ); // at least 4
-
-   auto tag = fc::to_lower( part[1] );
-
-   if( part[0].size() && part[0][0] == '@' ) {
-      auto acnt = part[0].substr(1);
-      _state.accounts[acnt] = my->_db.get_account(acnt);
-      auto& eacnt = _state.accounts[acnt];
-      if( part[1] == "transfers" ) {
-         auto history = get_account_history( acnt, uint64_t(-1), 1000 );
-         for( auto& item : history ) {
-            switch( item.second.op.which() ) {
-               case operation::tag<transfer_to_vesting_operation>::value:
-               case operation::tag<withdraw_vesting_operation>::value:
-               case operation::tag<interest_operation>::value:
-               case operation::tag<transfer_operation>::value:
-               case operation::tag<liquidity_reward_operation>::value:
-               case operation::tag<curate_reward_operation>::value:
-                  eacnt.transfer_history[item.first] =  item.second;
-                  break;
-               case operation::tag<comment_operation>::value:
-               //   eacnt.post_history[item.first] =  item.second;
-                  break;
-               case operation::tag<limit_order_create_operation>::value:
-               case operation::tag<limit_order_cancel_operation>::value:
-               case operation::tag<fill_convert_request_operation>::value:
-               case operation::tag<fill_order_operation>::value:
-               //   eacnt.market_history[item.first] =  item.second;
-                  break;
-               case operation::tag<vote_operation>::value:
-               case operation::tag<account_witness_vote_operation>::value:
-               case operation::tag<account_witness_proxy_operation>::value:
-               //   eacnt.vote_history[item.first] =  item.second;
-                  break;
-               case operation::tag<account_create_operation>::value:
-               case operation::tag<account_update_operation>::value:
-               case operation::tag<witness_update_operation>::value:
-               case operation::tag<pow_operation>::value:
-               case operation::tag<custom_operation>::value:
-               default:
-                  eacnt.other_history[item.first] =  item.second;
-            }
-         }
-      } else if( part[1] == "recent-replies" ) {
-        auto replies = get_replies_by_last_update( acnt, "", 50 );
-        eacnt.recent_replies = vector<string>();
-        for( const auto& reply : replies ) {
-           auto reply_ref = reply.author+"/"+reply.permlink;
-           _state.content[ reply_ref ] = reply;
-           eacnt.recent_replies->push_back( reply_ref );
-        }
-      } else if( part[1] == "posts" ) {
-        int count = 0;
-        const auto& pidx = my->_db.get_index_type<comment_index>().indices().get<by_author_last_update>();
-        auto itr = pidx.lower_bound( boost::make_tuple(acnt, time_point_sec::maximum() ) );
-        eacnt.posts = vector<string>();
-        while( itr != pidx.end() && itr->author == acnt && count < 20 ) {
-           eacnt.posts->push_back(itr->permlink);
-           _state.content[acnt+"/"+itr->permlink] = *itr;
-           set_pending_payout( _state.content[acnt+"/"+itr->permlink] );
-           ++itr;
-           ++count;
-        }
-      } else if( part[1].size() == 0 || part[1] == "blog" ) {
-           int count = 0;
-           const auto& pidx = my->_db.get_index_type<comment_index>().indices().get<by_blog>();
-           auto itr = pidx.lower_bound( boost::make_tuple(acnt, std::string(""), time_point_sec::maximum() ) );
-           eacnt.blog = vector<string>();
-           while( itr != pidx.end() && itr->author == acnt && count < 20 && !itr->parent_author.size() ) {
-              eacnt.blog->push_back(itr->permlink);
-              _state.content[acnt+"/"+itr->permlink] = *itr;
-              set_pending_payout( _state.content[acnt+"/"+itr->permlink] );
-              ++itr;
-              ++count;
-           }
-      } else if( part[1].size() == 0 || part[1] == "feed" ) {
-         const auto& fidxs = my->_db.get_index_type<follow::feed_index>().indices();
-         const auto& fidx = fidxs.get<muse::follow::by_account>();
-
-         auto itr = fidx.lower_bound( eacnt.id );
-         int count = 0;
-         while( itr != fidx.end() && itr->account == eacnt.id && count < 100 ) {
-            const auto& c = itr->comment( my->_db );
-            const auto link = c.author + "/" + c.permlink;
-            _state.content[link] = c;
-            eacnt.feed->push_back( link );
-            set_pending_payout( _state.content[link] );
-            ++itr;
-            ++count;
-         }
-      }
-   }
-   /// pull a complete discussion
-   else if( part[1].size() && part[1][0] == '@' ) {
-
-      auto account  = part[1].substr( 1 );
-      auto category = part[0];
-      auto slug     = part[2];
-
-      auto key = account +"/" + slug;
-      auto dis = get_content( account, slug );
-      recursively_fetch_content( _state, dis, accounts );
-   }
-   else if( part[0] == "witnesses" || part[0] == "~witnesses") {
-      auto wits = get_witnesses_by_vote( "", 50 );
-      for( const auto& w : wits ) {
-         _state.witnesses[w.owner] = w;
-      }
-      _state.pow_queue = get_miner_queue();
-   }
-   else {
-      elog( "What... no matches" );
-   }
-
-   for( const auto& a : accounts )
-   {
-      _state.accounts.erase("");
-      _state.accounts[a] = my->_db.get_account( a );
-   }
-
-
-   _state.witness_schedule = my->_db.get_witness_schedule_object();
-
- } catch ( const fc::exception& e ) {
-    _state.error = e.to_detail_string();
- }
- return _state;
-}*/
 
 annotated_signed_transaction database_api::get_transaction( transaction_id_type id )const {
    const auto& idx = my->_db.get_index_type<operation_index>().indices().get<by_transaction_id>();

@@ -394,6 +394,7 @@ namespace graphene { namespace net { namespace detail {
       fc::time_point_sec get_block_time(const item_hash_t& block_id) override;
       fc::time_point_sec get_blockchain_now() override;
       item_hash_t get_head_block_id() const override;
+      const fc::sha256& get_genesis_hash() const override;
       uint32_t estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const override;
       void error_encountered(const std::string& message, const fc::oexception& error) override;
     };
@@ -822,7 +823,7 @@ namespace graphene { namespace net { namespace detail {
       _maximum_blocks_per_peer_during_syncing(GRAPHENE_NET_MAX_BLOCKS_PER_PEER_DURING_SYNCING)
     {
       _rate_limiter.set_actual_rate_time_constant(fc::seconds(2));
-      fc::rand_pseudo_bytes(&_node_id.data[0], (int)_node_id.size());
+      fc::rand_bytes(&_node_id.data[0], (int)_node_id.size());
     }
 
     node_impl::~node_impl()
@@ -1858,7 +1859,7 @@ namespace graphene { namespace net { namespace detail {
       if (!_hard_fork_block_numbers.empty())
         user_data["last_known_fork_block_number"] = _hard_fork_block_numbers.back();
 
-      user_data["chain_id"] = MUSE_CHAIN_ID;
+      user_data["genesis_hash"] = fc::variant( _delegate->get_genesis_hash(), 2 );
 
       return user_data;
     }
@@ -1882,6 +1883,8 @@ namespace graphene { namespace net { namespace detail {
         originating_peer->node_id = user_data["node_id"].as<node_id_t>(1);
       if (user_data.contains("last_known_fork_block_number"))
         originating_peer->last_known_fork_block_number = user_data["last_known_fork_block_number"].as<uint32_t>(1);
+      if (user_data.contains("genesis_hash"))
+         originating_peer->genesis_hash = user_data["genesis_hash"].as<fc::sha256>(2);
     }
 
     void node_impl::on_hello_message( peer_connection* originating_peer, const hello_message& hello_message_received )
@@ -1942,12 +1945,18 @@ namespace graphene { namespace net { namespace detail {
           disconnect_from_peer( originating_peer, "Invalid signature in hello message" );
           return;
         }
-        if (hello_message_received.chain_id != MUSE_CHAIN_ID)
+        if (hello_message_received.chain_id != MUSE_CHAIN_ID
+               || ( originating_peer->genesis_hash.valid()
+                    && *originating_peer->genesis_hash != _delegate->get_genesis_hash() ) )
         {
           wlog("Received hello message from peer on a different chain: ${message}", ("message", hello_message_received));
           std::ostringstream rejection_message;
-          rejection_message << "You're on a different chain than I am.  I'm on " << MUSE_CHAIN_ID.str() <<
-                               " and you're on " << hello_message_received.chain_id.str(); 
+          if( hello_message_received.chain_id != MUSE_CHAIN_ID )
+             rejection_message << "You're on a different chain than I am.  I'm on " << MUSE_CHAIN_ID.str()
+                               << " and you're on " << hello_message_received.chain_id.str();
+          else // must be genesis hash then
+             rejection_message << "You're on a different genesis than I am.  I'm on " << _delegate->get_genesis_hash().str()
+                               << " and you're on " << originating_peer->genesis_hash->str();
           connection_rejected_message connection_rejected(_user_agent_string, core_protocol_version,
                 originating_peer->get_socket().remote_endpoint(),
                 rejection_reason_code::different_chain,
@@ -2640,11 +2649,6 @@ namespace graphene { namespace net { namespace detail {
           if (!item_hashes_received.empty() && !originating_peer->ids_of_items_to_get.empty())
             assert(item_hashes_received.front() != originating_peer->ids_of_items_to_get.back());
 
-          // append the remaining items to the peer's list
-          boost::push_back(originating_peer->ids_of_items_to_get, item_hashes_received);
-
-          originating_peer->number_of_unfetched_item_ids = blockchain_item_ids_inventory_message_received.total_remaining_item_count;
-
           // at any given time, there's a maximum number of blocks that can possibly be out there
           // [(now - genesis time) / block interval].  If they offer us more blocks than that,
           // they must be an attacker or have a buggy client.
@@ -2665,6 +2669,9 @@ namespace graphene { namespace net { namespace detail {
                                  true, error_for_peer);
             return;
           }
+
+          // append the remaining items to the peer's list
+          boost::push_back(originating_peer->ids_of_items_to_get, item_hashes_received);
 
           uint32_t new_number_of_unfetched_items = calculate_unsynced_block_count_from_all_peers();
           if (new_number_of_unfetched_items != _total_number_of_unfetched_items)
@@ -3873,7 +3880,6 @@ namespace graphene { namespace net { namespace detail {
         fc::exception detailed_error( FC_LOG_MESSAGE(error, "You sent me a message that I didn't ask for, message_hash: ${message_hash}",
                                                     ( "message_hash", message_hash ) ) );
         disconnect_from_peer( originating_peer, "You sent me a message that I didn't request", true, detailed_error );
-        return;
       }
       else
       {
@@ -4328,7 +4334,7 @@ namespace graphene { namespace net { namespace detail {
         // if we're connecting to them, we believe they're not firewalled
         potential_peer_record updated_peer_record = _potential_peer_db.lookup_or_create_entry_for_endpoint(remote_endpoint);
         updated_peer_record.last_connection_disposition = last_connection_failed;
-        updated_peer_record.last_connection_attempt_time = fc::time_point::now();;
+        updated_peer_record.last_connection_attempt_time = fc::time_point::now();
         _potential_peer_db.update_entry(updated_peer_record);
       }
       else
@@ -5528,6 +5534,11 @@ namespace graphene { namespace net { namespace detail {
     item_hash_t statistics_gathering_node_delegate_wrapper::get_head_block_id() const
     {
       INVOKE_AND_COLLECT_STATISTICS(get_head_block_id);
+    }
+
+    const fc::sha256& statistics_gathering_node_delegate_wrapper::get_genesis_hash()const
+    {
+       return _node_delegate->get_genesis_hash();
     }
 
     uint32_t statistics_gathering_node_delegate_wrapper::estimate_last_known_fork_from_git_revision_timestamp(uint32_t unix_timestamp) const

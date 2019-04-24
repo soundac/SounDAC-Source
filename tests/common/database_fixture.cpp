@@ -100,7 +100,7 @@ clean_database_fixture::~clean_database_fixture()
    if( data_dir )
       db.close();
    return;
-} FC_CAPTURE_AND_RETHROW() }
+} FC_CAPTURE_AND_LOG( ("Exception in clean_database_fixture destructor") ) }
 
 live_database_fixture::live_database_fixture()
 {
@@ -139,7 +139,7 @@ live_database_fixture::~live_database_fixture()
       db.close();
       return;
    }
-   FC_LOG_AND_RETHROW()
+   FC_CAPTURE_AND_LOG( ("Exception in clean_database_fixture destructor") )
 }
 
 fc::ecc::private_key database_fixture::generate_private_key(string seed)
@@ -160,6 +160,14 @@ string database_fixture::generate_anon_acct_name()
 static genesis_state_type prepare_genesis() {
    genesis_state_type result;
    result.init_supply = 10000 * asset::scaled_precision( MUSE_ASSET_PRECISION );
+   {
+      const fc::ecc::private_key balance1 = fc::ecc::private_key::regenerate( fc::sha256::hash( string( "balance_key_1" ) ) );
+      genesis_state_type::initial_balance_type balance;
+      balance.owner = balance1.get_public_key();
+      balance.asset_symbol = "2.28.0";
+      balance.amount = 1;
+      result.initial_balances.push_back( balance );
+   }
    return result;
 }
 
@@ -478,6 +486,17 @@ void database_fixture::validate_database( void )
          {
             total_mbd += asset( itr->for_sale, MBD_SYMBOL );
          }
+      }
+
+      const auto& balance_idx = db.get_index_type< balance_index >().indices().get< by_id >();
+      for( const auto& balance : balance_idx )
+      {
+         if( balance.balance.asset_id == MUSE_SYMBOL )
+            total_supply += balance.balance;
+         else if ( balance.balance.asset_id == MBD_SYMBOL )
+            total_mbd += balance.balance;
+         else
+            BOOST_CHECK( !"Encountered illegal symbol in initial balance" );
       }
 
       auto gpo = db.get_dynamic_global_properties();

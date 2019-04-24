@@ -105,7 +105,8 @@ namespace muse { namespace chain {
          const signed_transaction&  get_recent_transaction( const transaction_id_type& trx_id )const;
          std::vector<block_id_type> get_block_ids_on_fork(block_id_type head_of_fork) const;
 
-         chain_id_type             get_chain_id()const;
+         chain_id_type              get_chain_id()const;
+         const fc::sha256&          get_genesis_json_hash()const;
 
          const witness_object* find_witness( const string& name )const;
          const streaming_platform_object* find_streaming_platform( const string& name )const;
@@ -124,6 +125,8 @@ namespace muse { namespace chain {
          void pay_fee( const account_object& a, asset fee );
          void update_account_bandwidth( const account_object& a, uint32_t trx_size );
          void update_account_market_bandwidth( const account_object& a, uint32_t trx_size );
+
+         asset get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const;
 
          void max_bandwidth_per_share()const;
 
@@ -426,6 +429,7 @@ namespace muse { namespace chain {
          void clear_expired_transactions();
          void clear_expired_proposals();
          void clear_expired_orders();
+         void clear_expired_delegations();
          void process_header_extensions( const signed_block& next_block );
 
          void reset_virtual_schedule_time();
@@ -438,7 +442,6 @@ namespace muse { namespace chain {
          asset get_vesting_reward()const;
 
          void pay_to_platform( streaming_platform_id_type platform, const asset& payout, const string& url );
-         void pay_to_curator(const content_object &co, account_id_type cur, const asset& pay);
          ///@}
 
          vector< signed_transaction >  _pending_tx;
@@ -467,6 +470,8 @@ namespace muse { namespace chain {
 
          node_property_object              _node_property_object;
 
+         fc::sha256                        genesis_json_hash;
+
          /**
           * Whether database is successfully opened or not.
           *
@@ -475,5 +480,8 @@ namespace muse { namespace chain {
           * database::close() has not been called, or failed during execution.
           */
          bool                              _opened = false;
+
+         // Counts nested proposal updates
+         uint32_t                          _push_proposal_nesting_depth = 0;
    };
 } }

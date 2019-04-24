@@ -24,6 +24,7 @@ namespace muse { namespace chain {
       FC_ASSERT( is_asset_type( fee, MUSE_SYMBOL ), "Account creation fee must be MUSE" );
       owner.validate();
       active.validate();
+      basic.validate();
 
       if ( json_metadata.size() > 0 )
       {
@@ -33,6 +34,27 @@ namespace muse { namespace chain {
       FC_ASSERT( fee >= asset( 0, MUSE_SYMBOL ) );
    }
 
+   void account_create_with_delegation_operation::validate() const
+   {
+      FC_ASSERT( is_valid_account_name( new_account_name ) );
+      FC_ASSERT( is_valid_account_name( creator ) );
+      FC_ASSERT( is_asset_type( fee, MUSE_SYMBOL ), "Account creation fee must be MUSE" );
+      FC_ASSERT( is_asset_type( delegation, VESTS_SYMBOL ), "Delegation must be VESTS" );
+
+      owner.validate();
+      active.validate();
+      basic.validate();
+
+      if( json_metadata.size() > 0 )
+      {
+         FC_ASSERT( fc::is_utf8(json_metadata), "JSON Metadata not formatted in UTF8" );
+         FC_ASSERT( fc::json::is_valid(json_metadata), "JSON Metadata not valid JSON" );
+      }
+
+      FC_ASSERT( fee >= asset( 0, MUSE_SYMBOL ), "Account creation fee cannot be negative" );
+      FC_ASSERT( delegation >= asset( 0, VESTS_SYMBOL ), "Delegation cannot be negative" );
+   }
+
    void account_update_operation::validate() const
    {
       FC_ASSERT( is_valid_account_name( account ) );
@@ -40,6 +62,8 @@ namespace muse { namespace chain {
          owner->validate();
       if (active)
          active->validate();
+      if( basic )
+         basic->validate();
 
       if ( json_metadata.size() > 0 )
       {
@@ -233,5 +257,13 @@ namespace muse { namespace chain {
       FC_ASSERT( is_valid_account_name( new_recovery_account ) );
    }
 
+   void delegate_vesting_shares_operation::validate()const
+   {
+      FC_ASSERT( is_valid_account_name( delegator ) );
+      FC_ASSERT( is_valid_account_name( delegatee ) );
+      FC_ASSERT( delegator != delegatee, "You cannot delegate VESTS to yourself" );
+      FC_ASSERT( is_asset_type( vesting_shares, VESTS_SYMBOL ), "Delegation must be VESTS" );
+      FC_ASSERT( vesting_shares >= asset( 0, VESTS_SYMBOL ), "Delegation cannot be negative" );
+   }
 
 } } // muse::chain

@@ -39,7 +39,6 @@ namespace muse { namespace chain {
 
    using                                    fc::uint128_t;
    typedef boost::multiprecision::uint256_t u256;
-   typedef boost::multiprecision::uint512_t u512;
 
    using                               std::map;
    using                               std::vector;
@@ -61,7 +60,6 @@ namespace muse { namespace chain {
    using                               fc::enum_type;
    using                               fc::optional;
    using                               fc::unsigned_int;
-   using                               fc::signed_int;
    using                               fc::time_point_sec;
    using                               fc::time_point;
    using                               fc::safe;
@@ -131,7 +129,9 @@ namespace muse { namespace chain {
       impl_report_object_type,
       impl_proposal_object_type,
       impl_content_stats_object_type,
-      impl_balance_object_type
+      impl_balance_object_type,
+      impl_vesting_delegation_object_type,
+      impl_vesting_delegation_expiration_object_type
    };
 
    class operation_object;
@@ -152,7 +152,6 @@ namespace muse { namespace chain {
    class block_summary_object;
    class chain_property_object;
    class witness_schedule_object;
-   class account_object;
    class witness_object;
    class liquidity_reward_balance_object;
    class hardfork_property_object;
@@ -165,6 +164,8 @@ namespace muse { namespace chain {
    class proposal_object;
    class content_stats_object;
    class balance_object;
+   class vesting_delegation_object;
+   class vesting_delegation_expiration_object;
 
 
    typedef object_id< implementation_ids, impl_operation_object_type,                        operation_object >                        operation_id_type;
@@ -197,6 +198,8 @@ namespace muse { namespace chain {
    typedef object_id< implementation_ids, impl_proposal_object_type,                         proposal_object>                          proposal_id_type;
    typedef object_id< implementation_ids, impl_content_stats_object_type,                    content_stats_object>                     content_stats_id_type;
    typedef object_id< implementation_ids, impl_balance_object_type,                          balance_object>                           balance_id_type;
+   typedef object_id< implementation_ids, impl_vesting_delegation_object_type,               vesting_delegation_object>                vesting_delegation_id_type;
+   typedef object_id< implementation_ids, impl_vesting_delegation_expiration_object_type,    vesting_delegation_expiration_object>     vesting_delegation_expiration_object_id_type;
 
 
    typedef fc::ripemd160                                        block_id_type;
@@ -338,7 +341,10 @@ FC_REFLECT_ENUM( muse::chain::impl_object_type,
                  (impl_asset_object_type)
                  (impl_report_object_type)
                  (impl_proposal_object_type)
-                 (impl_content_stats_object_type)(impl_balance_object_type)
+                 (impl_content_stats_object_type)
+                 (impl_balance_object_type)
+                 (impl_vesting_delegation_object_type)
+                 (impl_vesting_delegation_expiration_object_type)
                )
 
 FC_REFLECT_TYPENAME( muse::chain::share_type )

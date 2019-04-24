@@ -50,7 +50,6 @@ void block_info_plugin::on_applied_block( const chain::signed_block& b )
    info.average_block_size          = dgpo.average_block_size;
    info.aslot                       = dgpo.current_aslot;
    info.last_irreversible_block_num = dgpo.last_irreversible_block_num;
-   return;
 }
 
 } } } // muse::plugin::block_info

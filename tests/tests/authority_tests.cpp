@@ -31,6 +31,7 @@
 #include <muse/chain/account_object.hpp>
 #include <muse/chain/asset_object.hpp>
 #include <muse/chain/content_object.hpp>
+#include <muse/chain/history_object.hpp>
 #include <muse/chain/proposal_object.hpp>
 
 #include <fc/crypto/digest.hpp>
@@ -1281,6 +1282,7 @@ BOOST_AUTO_TEST_CASE( proposals_with_mixed_authorities )
       cup.url = "ipfs://abcdefg1";
       cup.side = content_update_operation::side_t::master;
       cup.new_playing_reward = 500;
+      cup.new_publishers_share = 0;
       pc.proposed_ops.emplace_back( cup );
       pc.expiration_time = db.head_block_time() + fc::minutes(1);
       trx.operations.push_back( pc );
@@ -1390,23 +1392,156 @@ BOOST_AUTO_TEST_CASE( proposals_with_mixed_authorities )
    }
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( nested_proposals )
+{ try {
+   ACTORS( (alice)(bob) );
+   fund( "alice", 100000 );
+
+   db._undo_db.set_max_size( 255 );
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
+   proposal_create_operation pco;
+   pco.expiration_time = db.head_block_time() + fc::minutes(1);
+
+   {
+      transfer_operation top;
+      top.from = "alice";
+      top.to = "bob";
+      top.amount = asset( 10000000, MUSE_SYMBOL ); // more than she has -> fails
+      pco.proposed_ops.emplace_back( top );
+      trx.operations.push_back( pco );
+      PUSH_TX( db, trx );
+      trx.clear();
+      pco.proposed_ops.clear();
+   }
+   const auto inner = pidx.begin()->id;
+
+   {
+      proposal_update_operation pup;
+      pup.proposal = inner;
+      pup.active_approvals_to_add.insert( "alice" );
+      pco.proposed_ops.emplace_back( pup );
+      pup.active_approvals_to_add.clear();
+      pup.active_approvals_to_remove.insert( "alice" );
+      pco.proposed_ops.emplace_back( pup );
+      pup.active_approvals_to_add.insert( "alice" );
+      pup.active_approvals_to_remove.clear();
+      pco.proposed_ops.emplace_back( pup );
+      trx.operations.push_back( pco );
+      BOOST_CHECK_THROW( PUSH_TX( db, trx ), fc::assert_exception );
+      trx.clear();
+      pco.proposed_ops.clear();
+   }
+
+   std::vector<proposal_id_type> nested;
+   nested.push_back( inner );
+   for( size_t i = 0; i < MUSE_MAX_MINERS * 2; i++ )
+   {
+      proposal_update_operation pup;
+      pup.proposal = nested.back();
+      pup.active_approvals_to_add.insert( "alice" );
+      pco.proposed_ops.emplace_back( pup );
+      trx.operations.push_back( pco );
+      PUSH_TX( db, trx, ~0 );
+      trx.clear();
+      pco.proposed_ops.clear();
+      auto itr = pidx.end();
+      nested.push_back( (--itr)->id );
+   }
+
+   proposal_update_operation pup;
+   pup.proposal = nested.back();
+   pup.active_approvals_to_add.insert( "alice" );
+   trx.operations.push_back( pup );
+   PUSH_TX( db, trx, ~0 );
+
+   for( size_t i = 1; i < nested.size(); i++ )
+      BOOST_CHECK_THROW( db.get<proposal_object>( nested[i] ), fc::assert_exception ); // executed successfully -> object removed
+   db.get<proposal_object>( inner ); // wasn't executed -> object exists, doesn't throw
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_CASE( basic_authority )
 { try {
    generate_block();
 
-   ACTORS( (alice)(brenda) );
+   ACTORS( (alice)(brenda)(charlene) );
 
    const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
 
-   proposal_create_operation pco;
+   // friendship requires basic auth, signed with post key
    friendship_operation friend_op;
    friend_op.who = "alice";
-   friend_op.whom = "brenda";
+   friend_op.whom = "brenda"; // a -> b
+   trx.operations.push_back( friend_op );
+   sign( trx, alice_post_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+
+   // signed with active key
+   friend_op.whom = "charlene"; // a -> c
+   trx.operations.push_back( friend_op );
+   sign( trx, alice_private_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+
+   proposal_create_operation pco;
+   friend_op.who = "brenda"; // b -> c
    pco.proposed_ops.emplace_back( friend_op );
    pco.expiration_time = db.head_block_time() + fc::minutes(1);
    trx.operations.push_back( pco );
    PUSH_TX( db, trx );
    trx.clear();
+   pco.proposed_ops.clear();
+
+   // approve proposal with active, sign with post
+   proposal_update_operation pup;
+   pup.proposal = pidx.begin()->id;
+   pup.active_approvals_to_add.insert( "brenda" );
+   trx.operations.push_back( pup );
+   sign( trx, brenda_post_key );
+   BOOST_CHECK_THROW( PUSH_TX( db, trx ), tx_missing_active_auth );
+   trx.signatures.clear();
+
+   // sign with active
+   sign( trx, brenda_private_key );
+   PUSH_TX( db, trx );
+   trx.clear();
+
+   BOOST_CHECK_EQUAL( 0, pidx.size() );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE( other_authority, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   generate_block();
+
+   ACTORS( (alice) );
+   fund( "alice", 1000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+   const auto& bidx = db.get_index_type<balance_index>().indices().get<by_id>();
+   const auto& balance = *bidx.begin();
+
+   transfer_operation top;
+   top.from = "alice";
+   top.to = MUSE_NULL_ACCOUNT;
+   top.amount = asset( 1 );
+
+   balance_claim_operation bco;
+   bco.deposit_to_account = "alice";
+   bco.balance_to_claim = balance.id;
+   bco.balance_owner_key = fc::ecc::private_key::regenerate( fc::sha256::hash( string( "balance_key_1" ) ) ).get_public_key();
+   bco.total_claimed = balance.balance;
+
+   proposal_create_operation pco;
+   pco.proposed_ops.emplace_back( top );
+   pco.proposed_ops.emplace_back( bco );
+   pco.expiration_time = db.head_block_time() + fc::minutes(1);
+   trx.operations.push_back( pco );
+   PUSH_TX( db, trx );
+   trx.clear();
+   pco.proposed_ops.clear();
 
    proposal_update_operation pup;
    pup.proposal = pidx.begin()->id;
@@ -1414,9 +1549,89 @@ BOOST_AUTO_TEST_CASE( basic_authority )
    trx.operations.push_back( pup );
    sign( trx, alice_private_key );
    PUSH_TX( db, trx );
+   trx.signatures.clear();
+
+   // verify it didn't execute
+   BOOST_CHECK_EQUAL( 1, pidx.size() );
+   BOOST_CHECK_GT( bidx.size(), 0 );
+   BOOST_CHECK_EQUAL( 1000, get_balance( "alice" ).amount.value );
+
+   db.set_hardfork( 4 );
+   generate_block();
+
+   // not allowed after hf 4
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   sign( trx, alice_private_key );
+   BOOST_REQUIRE_THROW( PUSH_TX( db, trx ), fc::assert_exception );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE( self_approving_proposal, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   ACTORS( (alice) );
+   fund( "alice", 100000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
    trx.clear();
 
-   BOOST_CHECK_EQUAL( 0, pidx.size() );
+   proposal_update_operation pup;
+   pup.proposal = proposal_id_type(0);
+   pup.active_approvals_to_add.insert( "alice" );
+
+   proposal_create_operation pop;
+   pop.proposed_ops.emplace_back(pup);
+   pop.expiration_time = db.head_block_time() + fc::days(1);
+   trx.operations.push_back(pop);
+   PUSH_TX( db, trx, ~0 );
+   auto itr = pidx.end();
+   const proposal_id_type pid1 = (--itr)->id;
+   trx.clear();
+   BOOST_REQUIRE_EQUAL( 0, pid1.instance.value );
+   db.get<proposal_object>(pid1);
+
+   trx.operations.push_back(pup);
+   PUSH_TX( db, trx, ~0 );
+
+   // Proposal failed and still exists
+   db.get<proposal_object>(pid1);
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE( self_deleting_proposal, database_fixture )
+{ try {
+   initialize_clean( 3 );
+
+   ACTORS( (alice) );
+   fund( "alice", 100000 );
+
+   const auto& pidx = db.get_index_type<proposal_index>().indices().get<by_id>();
+
+   trx.clear();
+
+   proposal_delete_operation pdo;
+   pdo.proposal = proposal_id_type(0);
+   pdo.vetoer = "alice";
+
+   proposal_create_operation pop;
+   pop.proposed_ops.emplace_back( pdo );
+   pop.expiration_time = db.head_block_time() + fc::minutes(1);
+   trx.operations.push_back( pop );
+   PUSH_TX( db, trx, ~0 );
+   auto itr = pidx.end();
+   const proposal_id_type pid1 = (--itr)->id;
+   trx.clear();
+   BOOST_REQUIRE_EQUAL( 0, pid1.instance.value );
+   db.get<proposal_object>(pid1);
+
+   proposal_update_operation pup;
+   pup.proposal = proposal_id_type(0);
+   pup.active_approvals_to_add.insert( "alice" );
+   trx.operations.push_back(pup);
+   PUSH_TX( db, trx, ~0 );
+
+   // Proposal failed and still exists
+   db.get<proposal_object>(pid1);
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()

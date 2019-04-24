@@ -40,17 +40,14 @@ struct genesis_state_type {
    struct initial_account_type {
       initial_account_type(const string& name = string(),
                            const public_key_type& owner_key = public_key_type(),
-                           const public_key_type& active_key = public_key_type(),
-                           bool is_lifetime_member = false)
+                           const public_key_type& active_key = public_key_type())
          : name(name),
            owner_key(owner_key),
-           active_key(active_key == public_key_type()? owner_key : active_key),
-           is_lifetime_member(is_lifetime_member)
+           active_key(active_key == public_key_type()? owner_key : active_key)
       {}
       string name;
       public_key_type owner_key;
       public_key_type active_key;
-      bool is_lifetime_member = false;
    };
    struct initial_asset_type {
 
@@ -93,6 +90,7 @@ struct genesis_state_type {
    uint64_t                                 initial_active_witnesses = 1;
    vector<initial_witness_type>             initial_witness_candidates;
    chain_id_type                            initial_chain_id;
+   fc::sha256                               json_hash;
    /**
     * Get the chain_id corresponding to this genesis state.
     *
@@ -102,7 +100,7 @@ struct genesis_state_type {
 
 } } // namespace muse::chain
 
-FC_REFLECT(muse::chain::genesis_state_type::initial_account_type, (name)(owner_key)(active_key)(is_lifetime_member))
+FC_REFLECT(muse::chain::genesis_state_type::initial_account_type, (name)(owner_key)(active_key))
 
 FC_REFLECT(muse::chain::genesis_state_type::initial_asset_type,
            (symbol)(issuer_name)(description)(precision)(max_supply))

@@ -144,9 +144,8 @@ namespace muse { namespace chain {
 
    struct by_url; 
    struct by_title;
-   struct by_uploader_url;
+   struct by_uploader;
    struct by_popularity;
-
    /**
     * @ingroup object_index
     */
@@ -156,11 +155,12 @@ namespace muse { namespace chain {
          ordered_unique< tag< by_id >, member< object, object_id_type, &object::id > >,
          ordered_unique< tag< by_url >, member< content_object, string, &content_object::url> >,
          ordered_non_unique< tag< by_title >, member< content_object, string, &content_object::track_title > >,
-         ordered_unique< tag< by_uploader_url >,
+         ordered_unique< tag< by_uploader >,
             composite_key< content_object, 
-               member< content_object, string, &content_object::uploader>,
-               member< content_object, string, &content_object::url>
-            >
+               member< content_object, string, &content_object::uploader >,
+               member< object, object_id_type, &object::id >
+            >,
+           composite_key_compare< std::less< string >, std::greater< object_id_type > >
          >,
          ordered_non_unique< tag< by_popularity >, member< content_object, uint32_t, &content_object::times_played_24 > >
       >
@@ -169,6 +169,48 @@ namespace muse { namespace chain {
    typedef generic_index< content_object,      content_multi_index_type >       content_index;
    typedef generic_index< content_vote_object, content_vote_multi_index_type >  content_vote_index;
    typedef generic_index< content_approve_object, content_approve_multi_index_type > content_approve_index;
+
+   /**
+    *  @brief This secondary index will allow a looking up content by genre.
+    */
+   class content_by_genre_index : public secondary_index
+   {
+      public:
+         virtual void object_inserted( const object& obj ) override;
+         virtual void object_removed( const object& obj ) override;
+         virtual void about_to_modify( const object& before ) override;
+         virtual void object_modified( const object& after  ) override;
+
+         const set< content_id_type >& find_by_genre( uint32_t genre )const;
+
+      private:
+         set< uint32_t > get_genres( const content_object& c )const;
+         void add_content( const set< uint32_t >& genres, content_id_type id );
+         void remove_content( const set< uint32_t >& genres, content_id_type id );
+         map< content_id_type, set<uint32_t> > in_progress;
+         map< uint32_t, set<content_id_type> > content_by_genre;
+   };
+
+   /**
+    *  @brief This secondary index will allow a looking up content by category.
+    */
+   class content_by_category_index : public secondary_index
+   {
+      public:
+         virtual void object_inserted( const object& obj ) override;
+         virtual void object_removed( const object& obj ) override;
+         virtual void about_to_modify( const object& before ) override;
+         virtual void object_modified( const object& after  ) override;
+
+         const set< content_id_type >& find_by_category( const string& category )const;
+
+      private:
+         void add_content( const optional<string>& category, content_id_type cid );
+         void remove_content( const optional<string>& category, content_id_type cid );
+         map< content_id_type, optional<string> > in_progress;
+         map< string, set<content_id_type> > content_by_category;
+   };
+
 } } // muse::chain
 
 FC_REFLECT_DERIVED( muse::chain::content_object, (graphene::db::object),

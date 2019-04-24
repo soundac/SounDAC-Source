@@ -18,15 +18,6 @@ using namespace muse::chain::test;
 
 BOOST_FIXTURE_TEST_SUITE( operation_tests, clean_database_fixture )
 
-BOOST_AUTO_TEST_CASE( account_create_validate )
-{
-   try
-   {
-
-   }
-   FC_LOG_AND_RETHROW()
-}
-
 BOOST_AUTO_TEST_CASE( account_create_authorities )
 {
    try
@@ -169,6 +160,164 @@ BOOST_AUTO_TEST_CASE( account_create_apply )
    }
    FC_LOG_AND_RETHROW()
 }
+
+BOOST_AUTO_TEST_CASE( account_create_with_delegation_validate )
+{ try {
+   const private_key_type priv_key = generate_private_key( "temp_key" );
+
+   account_create_with_delegation_operation op;
+   op.fee = asset( 10, MUSE_SYMBOL );
+   op.delegation = asset( 100, VESTS_SYMBOL );
+   op.creator = "alice";
+   op.new_account_name = "bob";
+   op.owner = authority( 1, priv_key.get_public_key(), 1 );
+   op.active = authority( 2, priv_key.get_public_key(), 2 );
+   op.memo_key = priv_key.get_public_key();
+   op.json_metadata = "{\"foo\":\"bar\"}";
+   op.validate();
+
+   // invalid creator
+   op.creator = "!alice";
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.creator = "alice";
+
+   // invalid account name
+   op.new_account_name = "!alice";
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.new_account_name = "bob";
+
+   // invalid fee
+   op.fee = asset( 10, VESTS_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.fee = asset( -10, MUSE_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.fee = asset( 10, MUSE_SYMBOL );
+
+   // invalid delegation
+   op.delegation = asset( 100, MUSE_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.delegation = asset( -100, VESTS_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.delegation = asset( 100, VESTS_SYMBOL );
+
+   // invalid JSON
+   op.json_metadata = "{]}";
+   BOOST_CHECK_THROW( op.validate(), fc::parse_error_exception );
+   op.json_metadata = "{\"foo\":\"bar\"}";
+
+   // invalid owner
+   op.owner = authority( 1, "!alice", 1 );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.owner = authority( 1, "alice", 1 );
+
+   // invalid active
+   op.active = authority( 1, "!alice", 1 );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.active = authority( 1, "alice", 1 );
+
+   // invalid basic
+   op.basic = authority( 1, "!alice", 1 );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.basic = authority( 1, "alice", 1 );
+
+   op.validate();
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( account_create_with_delegation_authorities )
+{ try {
+   BOOST_TEST_MESSAGE( "Testing: account_create_with_delegation_authorities" );
+
+   account_create_with_delegation_operation op;
+   op.creator = "alice";
+
+   flat_set< string > auths;
+   flat_set< string > expected;
+
+   op.get_required_owner_authorities( auths );
+   BOOST_REQUIRE( auths == expected );
+
+   expected.insert( "alice" );
+   op.get_required_active_authorities( auths );
+   BOOST_REQUIRE( auths == expected );
+
+   expected.clear();
+   auths.clear();
+   op.get_required_basic_authorities( auths );
+   BOOST_REQUIRE( auths == expected );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( account_create_with_delegation_apply )
+{ try {
+   BOOST_TEST_MESSAGE( "Testing: account_create_with_delegation_apply" );
+   signed_transaction tx;
+   ACTORS( (alice) );
+   generate_blocks(1);
+   fund( "alice", 1500 );
+   vest( "alice", 1000 );
+
+   private_key_type priv_key = generate_private_key( "temp_key" );
+
+   generate_block();
+
+   db.modify( db.get_witness_schedule_object(), []( witness_schedule_object& w ) {
+      w.median_props.account_creation_fee = asset( 300, MUSE_SYMBOL );
+      // actually required VESTS for new account:
+      // account_creation_fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO * vesting_share_price
+      // where fee in MUSE counts as fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO * vesting_share_price
+      // and delegated shares count as themselves
+   });
+
+   generate_block();
+
+   account_create_with_delegation_operation op;
+   op.fee = asset( 10, MUSE_SYMBOL );
+   op.delegation = asset( 100, VESTS_SYMBOL );
+   op.creator = "alice";
+   op.new_account_name = "bob";
+   op.owner = authority( 1, priv_key.get_public_key(), 1 );
+   op.active = authority( 2, priv_key.get_public_key(), 2 );
+   op.memo_key = priv_key.get_public_key();
+   op.json_metadata = "{\"foo\":\"bar\"}";
+
+   // Alice doesn't have enough VESTS
+   op.delegation = asset( 100000000, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
+   tx.clear();
+
+   // Alice doesn't have enough MUSE
+   op.delegation = asset( 100, VESTS_SYMBOL );
+   op.fee = asset( 1000, MUSE_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
+   tx.clear();
+
+   // Insufficient fee
+   op.fee = asset( 10, MUSE_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
+   tx.clear();
+
+   // Required: 300*5*1000 = 1500000
+   op.fee = asset( 100, MUSE_SYMBOL );
+   op.delegation = asset( 1000000, VESTS_SYMBOL );
+   // Present: 100 MUSE*5*1000 + 1000000 VESTS
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   const account_object& alice_new = db.get_account("alice");
+   const account_object& bob = db.get_account("bob");
+   BOOST_CHECK_EQUAL( 1000000, bob.received_vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, bob.vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 1000000, alice_new.delegated_vesting_shares.amount.value );
+
+} FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( account_update_validate )
 {
@@ -317,259 +466,242 @@ BOOST_AUTO_TEST_CASE( account_update_apply )
    FC_LOG_AND_RETHROW()
 }
 
+BOOST_AUTO_TEST_CASE( delegate_vesting_shares_validate )
+{ try {
+   delegate_vesting_shares_operation op;
+
+   op.delegator = "alice";
+   op.delegatee = "bob";
+   op.vesting_shares = asset( 1, VESTS_SYMBOL );
+   op.validate();
+
+   // invalid delegator
+   op.delegator = "!alice";
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.delegator = "alice";
+
+   // invalid delegatee
+   op.delegatee = "!alice";
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.delegatee = "bob";
+
+   // invalid self-delegation
+   op.delegatee = "alice";
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.delegatee = "bob";
+
+   // invalid amount
+   op.vesting_shares = asset( 1, MUSE_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.vesting_shares = asset( -1, VESTS_SYMBOL );
+   BOOST_CHECK_THROW( op.validate(), fc::assert_exception );
+   op.vesting_shares = asset( 1, VESTS_SYMBOL );
+
+   op.validate();
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( delegate_vesting_shares_authorities )
+{ try {
+   BOOST_TEST_MESSAGE( "Testing: delegate_vesting_shares_authorities" );
+   signed_transaction tx;
+   ACTORS( (alice)(bob) )
+   fund( "alice", 1000000 );
+   vest( "alice", 1000000 );
+
+   delegate_vesting_shares_operation op;
+   op.vesting_shares = asset( 1000000, VESTS_SYMBOL );
+   op.delegator = "alice";
+   op.delegatee = "bob";
+
+   tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   tx.operations.push_back( op );
+
+   BOOST_TEST_MESSAGE( "--- Test failure when no signatures" );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_missing_active_auth );
+
+   BOOST_TEST_MESSAGE( "--- Test success with signature" );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   BOOST_TEST_MESSAGE( "--- Test failure when duplicate signatures" );
+   op.vesting_shares = asset( 1000001, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_duplicate_sig );
+
+   BOOST_TEST_MESSAGE( "--- Test failure when signed by an additional signature not in the creator's authority" );
+   tx.signatures.clear();
+   tx.sign( init_account_priv_key, db.get_chain_id() );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_irrelevant_sig );
+
+   BOOST_TEST_MESSAGE( "--- Test failure when signed by a signature not in the creator's authority" );
+   tx.signatures.clear();
+   tx.sign( init_account_priv_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_missing_active_auth );
+   validate_database();
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( delegate_vesting_shares_apply )
+{ try {
+   BOOST_TEST_MESSAGE( "Testing: delegate_vesting_shares_apply" );
+   signed_transaction tx;
+   ACTORS( (alice)(bob) )
+   generate_block();
+
+   fund( "alice", 1000000 );
+   vest( "alice", 1000000 );
+
+   generate_block();
+
+   db.modify( db.get_witness_schedule_object(), []( witness_schedule_object& w ) {
+      w.median_props.account_creation_fee = asset( 1, MUSE_SYMBOL );
+   });
+
+   generate_block();
+
+   delegate_vesting_shares_operation op;
+   op.vesting_shares = asset( 1000000, VESTS_SYMBOL );
+   op.delegator = "alice";
+   op.delegatee = "bob";
+
+   tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   generate_blocks( 1 );
+
+   const account_object& alice_acc = db.get_account( "alice" );
+   const account_object& bob_acc = db.get_account( "bob" );
+
+   BOOST_REQUIRE( alice_acc.delegated_vesting_shares == asset( 1000000, VESTS_SYMBOL ) );
+   BOOST_REQUIRE( bob_acc.received_vesting_shares == asset( 1000000, VESTS_SYMBOL ) );
+
+   BOOST_TEST_MESSAGE( "--- Test that the delegation object is correct. " );
+   const auto& vd_idx = db.get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
+   auto delegation = vd_idx.find( boost::make_tuple( op.delegator, op.delegatee ) );
+
+   BOOST_REQUIRE( delegation != vd_idx.end() );
+   BOOST_REQUIRE( delegation->delegator == op.delegator);
+   BOOST_REQUIRE( delegation->vesting_shares == asset( 1000000, VESTS_SYMBOL ) );
+
+   validate_database();
+
+   op.vesting_shares = asset( 2000000, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( alice_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   generate_blocks(1);
+
+   BOOST_REQUIRE( delegation != vd_idx.end() );
+   BOOST_REQUIRE( delegation->delegator == op.delegator );
+   BOOST_REQUIRE( delegation->vesting_shares == asset( 2000000, VESTS_SYMBOL ) );
+   BOOST_REQUIRE( alice_acc.delegated_vesting_shares == asset( 2000000, VESTS_SYMBOL ) );
+   BOOST_REQUIRE( bob_acc.received_vesting_shares == asset( 2000000, VESTS_SYMBOL ) );
+
+   BOOST_TEST_MESSAGE( "--- Test that effective vesting shares is accurate and being applied." );
+
+   generate_block();
+   ACTORS( (sam)(dave) )
+   generate_block();
+
+   fund( "sam", 1000000 );
+   vest( "sam", 1000000 );
+
+   generate_block();
+
+   auto sam_vest = db.get_account( "sam" ).vesting_shares;
+
+   BOOST_TEST_MESSAGE( "--- Test failure when delegating 0 VESTS" );
+   tx.clear();
+   op.vesting_shares = asset( 0, VESTS_SYMBOL );
+   op.delegator = "sam";
+   op.delegatee = "dave";
+   tx.operations.push_back( op );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx ), fc::assert_exception );
+   tx.clear();
+
+   BOOST_TEST_MESSAGE( "--- Testing failure delegating more vesting shares than account has." );
+   op.vesting_shares = asset( sam_vest.amount + 1, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx ), fc::assert_exception );
+
+   BOOST_TEST_MESSAGE( "--- Test failure delegating vesting shares that are part of a power down" );
+   tx.clear();
+   sam_vest = asset( sam_vest.amount / 2, VESTS_SYMBOL );
+   withdraw_vesting_operation withdraw;
+   withdraw.account = "sam";
+   withdraw.vesting_shares = sam_vest;
+   tx.operations.push_back( withdraw );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   op.vesting_shares = asset( sam_vest.amount + 2, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx ), fc::assert_exception );
+   tx.clear();
+
+   withdraw.vesting_shares = asset( 0, VESTS_SYMBOL );
+   tx.operations.push_back( withdraw );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   BOOST_TEST_MESSAGE( "--- Test failure powering down vesting shares that are delegated" );
+   sam_vest.amount += 1000;
+   op.vesting_shares = sam_vest;
+   tx.operations.push_back( op );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+   tx.clear();
+
+   withdraw.vesting_shares = asset( sam_vest.amount, VESTS_SYMBOL );
+   tx.operations.push_back( withdraw );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   MUSE_REQUIRE_THROW( db.push_transaction( tx ), fc::assert_exception );
+   tx.clear();
+
+   BOOST_TEST_MESSAGE( "--- Remove a delegation and ensure it is returned after 1 week" );
+   op.vesting_shares = asset( 0, VESTS_SYMBOL );
+   tx.operations.push_back( op );
+   tx.sign( sam_private_key, db.get_chain_id() );
+   db.push_transaction( tx, 0 );
+
+   const auto& exp_idx = db.get_index_type< vesting_delegation_expiration_index >().indices().get< by_id >();
+   auto exp_obj = exp_idx.begin();
+   auto end = exp_idx.end();
+   const auto& gpo = db.get_dynamic_global_properties();
+
+   BOOST_REQUIRE( gpo.delegation_return_period == MUSE_DELEGATION_RETURN_PERIOD );
+
+   BOOST_REQUIRE( exp_obj != end );
+   BOOST_REQUIRE( exp_obj->delegator == "sam" );
+   BOOST_REQUIRE( exp_obj->vesting_shares == sam_vest );
+   BOOST_REQUIRE( exp_obj->expiration == db.head_block_time() + gpo.delegation_return_period );
+   BOOST_REQUIRE( db.get_account( "sam" ).delegated_vesting_shares == sam_vest );
+   BOOST_REQUIRE( db.get_account( "dave" ).received_vesting_shares == asset( 0, VESTS_SYMBOL ) );
+   delegation = vd_idx.find( boost::make_tuple( op.delegator, op.delegatee ) );
+   BOOST_REQUIRE( delegation == vd_idx.end() );
+
+   generate_blocks( exp_obj->expiration + MUSE_BLOCK_INTERVAL );
+
+   exp_obj = exp_idx.begin();
+
+   BOOST_REQUIRE( exp_obj == end );
+   BOOST_REQUIRE( db.get_account( "sam" ).delegated_vesting_shares == asset( 0, VESTS_SYMBOL ) );
+} FC_LOG_AND_RETHROW() }
+
 /*
-BOOST_AUTO_TEST_CASE( comment_validate )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: comment_validate" );
-
-
-      validate_database();
-   }
-   FC_LOG_AND_RETHROW()
-}
-
-BOOST_AUTO_TEST_CASE( comment_authorities )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: comment_authorities" );
-
-      ACTORS( (alice)(bob) );
-      generate_blocks( 60 / MUSE_BLOCK_INTERVAL );
-
-      comment_operation op;
-      op.author = "alice";
-      op.permlink = "lorem";
-      op.parent_author = "";
-      op.parent_permlink = "ipsum";
-      op.title = "Lorem Ipsum";
-      op.body = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
-      op.json_metadata = "{\"foo\":\"bar\"}";
-
-      signed_transaction tx;
-      tx.operations.push_back( op );
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-
-      BOOST_TEST_MESSAGE( "--- Test failure when no signatures" );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_missing_posting_auth );
-
-      BOOST_TEST_MESSAGE( "--- Test failure when duplicate signatures" );
-      tx.sign( alice_post_key, db.get_chain_id() );
-      tx.sign( alice_post_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), tx_duplicate_sig );
-
-      BOOST_TEST_MESSAGE( "--- Test success with post signature" );
-      tx.signatures.clear();
-      tx.sign( alice_post_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      BOOST_TEST_MESSAGE( "--- Test failure when signed by an additional signature not in the creator's authority" );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-
-      BOOST_TEST_MESSAGE( "--- Test failure when signed by a signature not in the creator's authority" );
-      tx.signatures.clear();
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_missing_posting_auth );
-
-      validate_database();
-   }
-   FC_LOG_AND_RETHROW()
-}
-
-BOOST_AUTO_TEST_CASE( comment_apply )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: comment_apply" );
-
-      ACTORS( (alice)(bob)(sam) )
-      generate_blocks( 60 / MUSE_BLOCK_INTERVAL );
-
-      comment_operation op;
-      op.author = "alice";
-      op.permlink = "lorem";
-      op.parent_author = "";
-      op.parent_permlink = "ipsum";
-      op.title = "Lorem Ipsum";
-      op.body = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
-      op.json_metadata = "{\"foo\":\"bar\"}";
-
-      signed_transaction tx;
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-
-      BOOST_TEST_MESSAGE( "--- Test Alice basic a root comment" );
-      tx.operations.push_back( op );
-      tx.sign( alice_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      const comment_object& alice_comment = db.get_comment( "alice", "lorem" );
-
-      BOOST_REQUIRE_EQUAL( alice_comment.author, op.author );
-      BOOST_REQUIRE_EQUAL( alice_comment.permlink, op.permlink );
-      BOOST_REQUIRE_EQUAL( alice_comment.parent_permlink, op.parent_permlink );
-      BOOST_REQUIRE( alice_comment.last_update == db.head_block_time() );
-      BOOST_REQUIRE( alice_comment.created == db.head_block_time() );
-      BOOST_REQUIRE_EQUAL( alice_comment.net_rshares.value, 0 );
-      BOOST_REQUIRE_EQUAL( alice_comment.abs_rshares.value, 0 );
-      BOOST_REQUIRE( alice_comment.cashout_time == fc::time_point_sec( db.head_block_time() + fc::seconds( MUSE_CASHOUT_WINDOW_SECONDS ) ) );
-
-      #ifndef IS_LOW_MEM
-         BOOST_REQUIRE_EQUAL( alice_comment.title, op.title );
-         BOOST_REQUIRE_EQUAL( alice_comment.body, op.body );
-         BOOST_REQUIRE_EQUAL( alice_comment.json_metadata, op.json_metadata );
-      #else
-         BOOST_REQUIRE_EQUAL( alice_comment.title, "" );
-         BOOST_REQUIRE_EQUAL( alice_comment.body, "" );
-         BOOST_REQUIRE_EQUAL( alice_comment.json_metadata, "" );
-      #endif
-
-      validate_database();
-
-      BOOST_TEST_MESSAGE( "--- Test Bob basic a comment on a non-existent comment" );
-      op.author = "bob";
-      op.permlink = "ipsum";
-      op.parent_author = "alice";
-      op.parent_permlink = "foobar";
-
-      tx.signatures.clear();
-      tx.operations.clear();
-      tx.operations.push_back( op );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
-
-      BOOST_TEST_MESSAGE( "--- Test Bob basic a comment on Alice's comment" );
-      op.parent_permlink = "lorem";
-
-      tx.signatures.clear();
-      tx.operations.clear();
-      tx.operations.push_back( op );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      const comment_object& bob_comment = db.get_comment( "bob", "ipsum" );
-
-      BOOST_REQUIRE_EQUAL( bob_comment.author, op.author );
-      BOOST_REQUIRE_EQUAL( bob_comment.permlink, op.permlink );
-      BOOST_REQUIRE_EQUAL( bob_comment.parent_author, op.parent_author );
-      BOOST_REQUIRE_EQUAL( bob_comment.parent_permlink, op.parent_permlink );
-      BOOST_REQUIRE( bob_comment.last_update == db.head_block_time() );
-      BOOST_REQUIRE( bob_comment.created == db.head_block_time() );
-      BOOST_REQUIRE_EQUAL( bob_comment.net_rshares.value, 0 );
-      BOOST_REQUIRE_EQUAL( bob_comment.abs_rshares.value, 0 );
-      BOOST_REQUIRE( bob_comment.cashout_time == fc::time_point_sec::maximum() );
-      BOOST_REQUIRE( bob_comment.root_comment == alice_comment.id );
-      validate_database();
-
-      BOOST_TEST_MESSAGE( "--- Test Sam basic a comment on Bob's comment" );
-
-      op.author = "sam";
-      op.permlink = "dolor";
-      op.parent_author = "bob";
-      op.parent_permlink = "ipsum";
-
-      tx.signatures.clear();
-      tx.operations.clear();
-      tx.operations.push_back( op );
-      tx.sign( sam_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      const comment_object& sam_comment = db.get_comment( "sam", "dolor" );
-
-      BOOST_REQUIRE_EQUAL( sam_comment.author, op.author );
-      BOOST_REQUIRE_EQUAL( sam_comment.permlink, op.permlink );
-      BOOST_REQUIRE_EQUAL( sam_comment.parent_author, op.parent_author );
-      BOOST_REQUIRE_EQUAL( sam_comment.parent_permlink, op.parent_permlink );
-      BOOST_REQUIRE( sam_comment.last_update == db.head_block_time() );
-      BOOST_REQUIRE( sam_comment.created == db.head_block_time() );
-      BOOST_REQUIRE_EQUAL( sam_comment.net_rshares.value, 0 );
-      BOOST_REQUIRE_EQUAL( sam_comment.abs_rshares.value, 0 );
-      BOOST_REQUIRE( sam_comment.cashout_time == fc::time_point_sec::maximum() );
-      BOOST_REQUIRE( sam_comment.root_comment == alice_comment.id );
-      validate_database();
-
-      generate_blocks( 60 * 5 / MUSE_BLOCK_INTERVAL + 1 );
-
-      BOOST_TEST_MESSAGE( "--- Test modifying a comment" );
-      const auto& mod_sam_comment = db.get_comment( "sam", "dolor" );
-      const auto& mod_bob_comment = db.get_comment( "bob", "ipsum" );
-      const auto& mod_alice_comment = db.get_comment( "alice", "lorem" );
-      fc::time_point_sec created = mod_sam_comment.created;
-
-      db.modify( mod_sam_comment, [&]( comment_object& com )
-      {
-         com.net_rshares = 10;
-         com.abs_rshares = 10;
-         com.children_rshares2 = db.calculate_vshares( 10 );
-      });
-
-      db.modify( mod_bob_comment, [&]( comment_object& com)
-      {
-         com.children_rshares2 = db.calculate_vshares( 10 );
-      });
-
-      db.modify( mod_alice_comment, [&]( comment_object& com)
-      {
-         com.children_rshares2 = db.calculate_vshares( 10 );
-      });
-
-      db.modify( db.get_dynamic_global_properties(), [&]( dynamic_global_property_object& o)
-      {
-         o.total_reward_shares2 = db.calculate_vshares( 10 );
-      });
-
-      tx.signatures.clear();
-      tx.operations.clear();
-      op.title = "foo";
-      op.body = "bar";
-      op.json_metadata = "{\"bar\":\"foo\"}";
-      tx.operations.push_back( op );
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-      tx.sign( sam_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      BOOST_REQUIRE_EQUAL( mod_sam_comment.author, op.author );
-      BOOST_REQUIRE_EQUAL( mod_sam_comment.permlink, op.permlink );
-      BOOST_REQUIRE_EQUAL( mod_sam_comment.parent_author, op.parent_author );
-      BOOST_REQUIRE_EQUAL( mod_sam_comment.parent_permlink, op.parent_permlink );
-      BOOST_REQUIRE( mod_sam_comment.last_update == db.head_block_time() );
-      BOOST_REQUIRE( mod_sam_comment.created == created );
-      BOOST_REQUIRE( mod_sam_comment.cashout_time == fc::time_point_sec::maximum() );
-      validate_database();
-
-      BOOST_TEST_MESSAGE( "--- Test failure basic withing 1 minute" );
-
-      op.permlink = "sit";
-      op.parent_author = "";
-      op.parent_permlink = "test";
-      tx.operations.clear();
-      tx.signatures.clear();
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-      tx.operations.push_back( op );
-      tx.sign( sam_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-
-      generate_blocks( 60 * 5 / MUSE_BLOCK_INTERVAL );
-
-      op.permlink = "amet";
-      tx.operations.clear();
-      tx.signatures.clear();
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-      tx.operations.push_back( op );
-      tx.sign( sam_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
-
-      validate_database();
-
-      generate_block();
-      db.push_transaction( tx, 0 );
-      validate_database();
-   }
-   FC_LOG_AND_RETHROW()
-}
-
 BOOST_AUTO_TEST_CASE( vote_validate )
 {
    try
@@ -1271,24 +1403,20 @@ BOOST_AUTO_TEST_CASE( withdraw_vesting_apply )
       op.account = "alice";
       op.vesting_shares = asset( -1, VESTS_SYMBOL );
 
-      generate_blocks( fc::time_point::now() - fc::seconds(30) );
-
       signed_transaction tx;
       tx.operations.push_back( op );
       tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
       tx.sign( alice_private_key, db.get_chain_id() );
-      db.push_transaction( tx, 0 );
-      // works, but sets withdraw_rate to 0
-      BOOST_CHECK_EQUAL( 0, db.get_account("alice").vesting_withdraw_rate.amount.value );
-
-      generate_blocks( fc::time_point::now() - fc::seconds(10) );
-
-      tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      // fails
       MUSE_REQUIRE_THROW( db.push_transaction( tx, 0 ), fc::assert_exception );
 
+      {
+         proposal_create_operation pop;
+         pop.proposed_ops.emplace_back( op );
+         pop.expiration_time = db.head_block_time() + fc::minutes(1);
+         tx.clear();
+         tx.operations.push_back( pop );
+         BOOST_CHECK_THROW( PUSH_TX( db, tx ), fc::assert_exception );
+      }
 
       BOOST_TEST_MESSAGE( "--- Test withdraw of existing VESTS" );
       op.vesting_shares = asset( db.get_account("alice").vesting_shares.amount / 2, VESTS_SYMBOL );
@@ -1299,6 +1427,15 @@ BOOST_AUTO_TEST_CASE( withdraw_vesting_apply )
       tx.operations.push_back( op );
       tx.sign( alice_private_key, db.get_chain_id() );
       db.push_transaction( tx, 0 );
+
+      {
+         proposal_create_operation pop;
+         pop.proposed_ops.emplace_back( op );
+         pop.expiration_time = db.head_block_time() + fc::minutes(1);
+         tx.clear();
+         tx.operations.push_back( pop );
+         PUSH_TX( db, tx );
+      }
 
       BOOST_REQUIRE_EQUAL( db.get_account("alice").vesting_shares.amount.value, old_vesting_shares.amount.value );
       BOOST_REQUIRE_EQUAL( db.get_account("alice").vesting_withdraw_rate.amount.value, ( old_vesting_shares.amount / 2 / MUSE_VESTING_WITHDRAW_INTERVALS ).value );
@@ -1460,7 +1597,6 @@ BOOST_AUTO_TEST_CASE( witness_update_apply )
       BOOST_REQUIRE_EQUAL( alice_witness.total_missed, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.last_aslot, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.last_confirmed_block_num, 0 );
-//      BOOST_REQUIRE_EQUAL( alice_witness.pow_worker, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.votes.value, 0 );
       BOOST_REQUIRE( alice_witness.virtual_last_update == 0 );
       BOOST_REQUIRE( alice_witness.virtual_position == 0 );
@@ -1487,7 +1623,6 @@ BOOST_AUTO_TEST_CASE( witness_update_apply )
       BOOST_REQUIRE_EQUAL( alice_witness.total_missed, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.last_aslot, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.last_confirmed_block_num, 0 );
-//      BOOST_REQUIRE_EQUAL( alice_witness.pow_worker, 0 );
       BOOST_REQUIRE_EQUAL( alice_witness.votes.value, 0 );
       BOOST_REQUIRE( alice_witness.virtual_last_update == 0 );
       BOOST_REQUIRE( alice_witness.virtual_position == 0 );
@@ -2920,12 +3055,6 @@ BOOST_AUTO_TEST_CASE( limit_order_cancel_authorities )
       tx.sign( alice_private_key, db.get_chain_id() );
       MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_duplicate_sig );
 
-/*      BOOST_TEST_MESSAGE( "--- Test failure with additional incorrect signature" );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-*/
       BOOST_TEST_MESSAGE( "--- Test failure with incorrect signature" );
       tx.signatures.clear();
       tx.sign( alice_post_key, db.get_chain_id() );
@@ -2983,33 +3112,6 @@ BOOST_AUTO_TEST_CASE( limit_order_cancel_apply )
       BOOST_REQUIRE( limit_order_idx.find( std::make_tuple( "alice", 5 ) ) == limit_order_idx.end() );
       BOOST_REQUIRE_EQUAL( alice.balance.amount.value, ASSET( "10.000 2.28.0" ).amount.value );
       BOOST_REQUIRE_EQUAL( alice.mbd_balance.amount.value, ASSET( "0.000 2.28.2" ).amount.value );
-   }
-   FC_LOG_AND_RETHROW()
-}
-
-BOOST_AUTO_TEST_CASE( pow_validate )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: pow_validate" );
-   }
-   FC_LOG_AND_RETHROW()
-}
-
-BOOST_AUTO_TEST_CASE( pow_authorities )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: pow_authorities" );
-   }
-   FC_LOG_AND_RETHROW()
-}
-
-BOOST_AUTO_TEST_CASE( pow_apply )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: pow_apply" );
    }
    FC_LOG_AND_RETHROW()
 }
@@ -3081,7 +3183,7 @@ BOOST_AUTO_TEST_CASE( account_recovery )
 
       tx.operations.push_back( request );
       tx.sign( alice_private_key, db.get_chain_id() );
-/*      db.push_transaction( tx, 0 );
+      db.push_transaction( tx, 0 );
 
       BOOST_REQUIRE( bob.owner == acc_update.owner );
 
@@ -3113,11 +3215,11 @@ BOOST_AUTO_TEST_CASE( account_recovery )
       tx.operations.push_back( request );
       tx.sign( alice_private_key, db.get_chain_id() );
       db.push_transaction( tx, 0 );
-*/      }
+      }
 
       generate_blocks( db.head_block_time() + MUSE_OWNER_UPDATE_LIMIT + fc::seconds(MUSE_BLOCK_INTERVAL) );
       tx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
-/*
+
       {
       const auto& bob = db.get_account( "bob" );
       BOOST_TEST_MESSAGE( "Testing failure when bob does not have new authority" );
@@ -3193,7 +3295,6 @@ BOOST_AUTO_TEST_CASE( account_recovery )
 
       generate_block();
 
-      const auto& final_request_idx = db.get_index_type< account_recovery_request_index >().indices();
       BOOST_REQUIRE( new_request_idx.begin() == new_request_idx.end() );
 
       recover.new_owner_authority = authority( 1, generate_private_key( "expire" ).get_public_key(), 1 );
@@ -3260,7 +3361,7 @@ BOOST_AUTO_TEST_CASE( account_recovery )
       tx.sign( generate_private_key( "last key" ), db.get_chain_id() );
       db.push_transaction( tx, 0 );
       BOOST_REQUIRE( db.get_account( "bob" ).owner == authority( 1, generate_private_key( "last key" ).get_public_key(), 1 ) );
-*/   }
+   }
    FC_LOG_AND_RETHROW()
 }
 
@@ -3338,7 +3439,7 @@ BOOST_AUTO_TEST_CASE( change_recovery_account )
       MUSE_REQUIRE_THROW( change_recovery_account("alice", "nobody"), fc::assert_exception );
       MUSE_REQUIRE_THROW( change_recovery_account("haxer", "sam"   ), fc::assert_exception );
       MUSE_REQUIRE_THROW( change_recovery_account("haxer", "nobody"), fc::assert_exception );
-/*      change_recovery_account("alice", "sam");
+      change_recovery_account("alice", "sam");
 
       fc::ecc::private_key alice_priv1 = fc::ecc::private_key::regenerate( fc::sha256::hash( "alice_k1" ) );
       fc::ecc::private_key alice_priv2 = fc::ecc::private_key::regenerate( fc::sha256::hash( "alice_k2" ) );
@@ -3356,9 +3457,9 @@ BOOST_AUTO_TEST_CASE( change_recovery_account )
       // can't recover with the current owner key
       MUSE_REQUIRE_THROW( recover_account( "alice", alice_priv1, alice_private_key ), fc::exception );
       // unless we change it!
-      change_owner( "alice", alice_private_key, public_key_type( alice_priv2.get_public_key() ) );
+      change_owner( "alice", alice_private_key, public_key_type( alice_pub2 ) );
       recover_account( "alice", alice_priv1, alice_private_key );
-*/   }
+   }
    FC_LOG_AND_RETHROW()
 }
 
