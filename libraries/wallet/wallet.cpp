@@ -211,7 +211,6 @@ class wallet_api_impl
             op.set_which( t );
             op.visit( op_prototype_visitor(t, _prototype_ops) );
          }
-         return;
       }
 
 public:
@@ -511,10 +510,7 @@ public:
          if( save_wallet )
             save_wallet_file();
          if( broadcast )
-         {
-            //_remote_net_broadcast->broadcast_transaction( tx );
-            auto result = _remote_net_broadcast->broadcast_transaction_synchronous( tx );
-         }
+            _remote_net_broadcast->broadcast_transaction( tx );
          return tx;
    } FC_CAPTURE_AND_RETHROW( (account_name)(creator_account_name)(broadcast) ) }
 
@@ -791,24 +787,35 @@ public:
          }
       }
 
+      flat_map< string, content_object > content_by_url;
       const auto keys_to_use = tx.minimize_required_signatures(
          MUSE_CHAIN_ID,
          available_keys,
-         [&]( const string& account_name ) -> const authority*
+         [&get_account_from_lut]( const string& account_name )
          { return &(get_account_from_lut( account_name ).active); },
-         [&]( const string& account_name ) -> const authority*
+         [&get_account_from_lut]( const string& account_name )
          { return &(get_account_from_lut( account_name ).owner); },
-         [&]( const string& account_name ) -> const authority*
+         [&get_account_from_lut]( const string& account_name )
          { return &(get_account_from_lut( account_name ).basic); },
-         [&]( const string& content_url ) -> const authority*
+         [this,&content_by_url]( const string& content_url )
          {
-              optional<content_object> content = *_remote_db->get_content_by_url ( content_url );
-              return &content->manage_master;
+            if( content_by_url.find( content_url ) == content_by_url.end() )
+            {
+               optional<content_object> content = *_remote_db->get_content_by_url ( content_url );
+               FC_ASSERT( content, "Unknown content {u}", ("u",content_url) );
+               content_by_url[content_url] = *content;
+            }
+            return &content_by_url[content_url].manage_master;
          },
-         [&]( const string& content_url ) -> const authority*
+         [this,&content_by_url]( const string& content_url )
          {
-              optional<content_object> content = *_remote_db->get_content_by_url ( content_url );
-              return &content->manage_comp;
+            if( content_by_url.find( content_url ) == content_by_url.end() )
+            {
+               optional<content_object> content = *_remote_db->get_content_by_url ( content_url );
+               FC_ASSERT( content, "Unknown content {u}", ("u",content_url) );
+               content_by_url[content_url] = *content;
+            }
+            return &content_by_url[content_url].manage_comp;
          },
          _remote_db->get_hardfork_version() < MUSE_HARDFORK_0_3_VERSION ? 1 :
          _remote_db->get_hardfork_version() < MUSE_HARDFORK_0_4_VERSION ? 2 : 3,
@@ -931,8 +938,6 @@ public:
       m["get_order_book"] = []( variant result, const fc::variants& a ) {
          auto orders = result.as< order_book >( GRAPHENE_MAX_NESTED_OBJECTS );
          std::stringstream ss;
-         //asset bid_sum = asset( 0, MBD_SYMBOL );
-         //asset ask_sum = asset( 0, MBD_SYMBOL );
          int spacing = 24;
 
          ss << setiosflags( ios::fixed ) << setiosflags( ios::left ) ;
@@ -973,7 +978,6 @@ public:
             if ( i < orders.asks.size() )
             {
                ask_sum += orders.asks[i].base;
-               //ss << ' ' << setw( spacing ) << (~orders.asks[i].order_price).to_real()
                ss << ' ' << setw( spacing ) << orders.asks[i].real_price
                   << ' ' << setw( spacing ) << asset( orders.asks[i].base, MBD_SYMBOL ).to_string() << orders.quote
                   << ' ' << setw( spacing ) << asset( orders.asks[i].quote, orders.asks[i].order_price.quote.asset_id ).to_string() << orders.base
@@ -1105,7 +1109,6 @@ public:
          optional<asset_object> asset_to_update = find_asset(asset_name);
          if (!asset_to_update)
             FC_THROW("No asset with that symbol exists!");
-         optional<account_id_type> new_issuer_account_id;
          
          asset_update_operation update_op;
          update_op.issuer = get_account_from_id(asset_to_update->issuer)->name;
@@ -1180,8 +1183,6 @@ public:
    uint32_t                                _tx_expiration_seconds = 30;
 
    flat_map<string, operation>             _prototype_ops;
-
-   static_variant_map _operation_which_map = create_static_variant_map< operation >();
 
 #ifdef __unix__
    mode_t                  _old_umask;
@@ -1392,7 +1393,6 @@ string wallet_api::help()const
 
 string wallet_api::gethelp(const string& method)const
 {
-   fc::api<wallet_api> tmp;
    std::stringstream ss;
    ss << "\n";
 
@@ -1526,6 +1526,35 @@ annotated_signed_transaction wallet_api::create_account_with_keys( string creato
    op.memo_key = memo;
    op.json_metadata = json_meta;
    op.fee = my->_remote_db->get_chain_properties().account_creation_fee;
+
+   signed_transaction tx;
+   tx.operations.push_back(op);
+   tx.validate();
+
+   return my->sign_transaction( tx, broadcast );
+} FC_CAPTURE_AND_RETHROW( (creator)(new_account_name)(json_meta)(owner)(active)(memo)(broadcast) ) }
+
+annotated_signed_transaction wallet_api::create_account_with_delegation( string creator,
+                                      string new_account_name,
+                                      string json_meta,
+                                      public_key_type owner,
+                                      public_key_type active,
+                                      public_key_type basic,
+                                      public_key_type memo,
+                                      bool broadcast )const
+{ try {
+   FC_ASSERT( !is_locked() );
+   account_create_with_delegation_operation op;
+   op.creator = creator;
+   op.new_account_name = new_account_name;
+   op.owner = authority( 1, owner, 1 );
+   op.active = authority( 1, active, 1 );
+   op.basic = authority( 1, basic, 1 );
+   op.memo_key = memo;
+   op.json_metadata = json_meta;
+   op.delegation = my->_remote_db->get_chain_properties().account_creation_fee * MUSE_CREATE_ACCOUNT_DELEGATION_RATIO
+                   * my->_remote_db->get_dynamic_global_properties().get_vesting_share_price();
+   op.delegation.amount += op.delegation.amount.value >> 4;
 
    signed_transaction tx;
    tx.operations.push_back(op);
@@ -2029,6 +2058,21 @@ annotated_signed_transaction wallet_api::set_withdraw_vesting_route( string from
    return my->sign_transaction( tx, broadcast );
 }
 
+annotated_signed_transaction wallet_api::delegate_vesting_shares(string from, string to, asset vesting_shares, bool broadcast )
+{
+   FC_ASSERT( !is_locked() );
+    delegate_vesting_shares_operation op;
+    op.delegator = from;
+    op.delegatee = to;
+    op.vesting_shares = vesting_shares;
+
+    signed_transaction tx;
+    tx.operations.push_back( op );
+    tx.validate();
+
+   return my->sign_transaction( tx, broadcast );
+}
+
 annotated_signed_transaction wallet_api::convert_mbd(string from, asset amount, bool broadcast )
 {
    FC_ASSERT( !is_locked() );
@@ -2514,7 +2558,7 @@ annotated_signed_transaction      wallet_api::send_private_message( string from,
    obj.checksum = pmo.checksum;
    obj.sent_time = pmo.sent_time;
    obj.encrypted_message = pmo.encrypted_message;
-   auto decrypted = try_decrypt_message(obj);
+   try_decrypt_message(obj);
 
    op.data = fc::raw::pack_to_vector( pmo );
 

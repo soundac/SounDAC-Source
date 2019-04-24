@@ -470,7 +470,7 @@ void account_witness_proxy_evaluator::do_apply( const account_witness_proxy_oper
       proxy_chain.reserve( MUSE_MAX_PROXY_RECURSION_DEPTH + 1 );
 
       /// check for proxy loops and fail to update the proxy if it would create a loop
-      auto cprox = &new_proxy;
+      auto* cprox = &new_proxy;
       while( cprox->proxy.size() != 0 ) {
          const auto& next_proxy = db().get_account( cprox->proxy );
          FC_ASSERT( proxy_chain.insert( next_proxy.get_id() ).second, "Attempt to create a proxy loop" );

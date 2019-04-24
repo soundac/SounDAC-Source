@@ -3880,7 +3880,6 @@ namespace graphene { namespace net { namespace detail {
         fc::exception detailed_error( FC_LOG_MESSAGE(error, "You sent me a message that I didn't ask for, message_hash: ${message_hash}",
                                                     ( "message_hash", message_hash ) ) );
         disconnect_from_peer( originating_peer, "You sent me a message that I didn't request", true, detailed_error );
-        return;
       }
       else
       {
@@ -4335,7 +4334,7 @@ namespace graphene { namespace net { namespace detail {
         // if we're connecting to them, we believe they're not firewalled
         potential_peer_record updated_peer_record = _potential_peer_db.lookup_or_create_entry_for_endpoint(remote_endpoint);
         updated_peer_record.last_connection_disposition = last_connection_failed;
-        updated_peer_record.last_connection_attempt_time = fc::time_point::now();;
+        updated_peer_record.last_connection_attempt_time = fc::time_point::now();
         _potential_peer_db.update_entry(updated_peer_record);
       }
       else

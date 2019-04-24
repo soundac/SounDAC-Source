@@ -1,6 +1,6 @@
 #ifndef MUSE_HARDFORK_0_4
 #define MUSE_HARDFORK_0_4 4
-// TBD
-#define MUSE_HARDFORK_0_4_TIME 1800000000
+// Mainnet hardfork: 2019-05-08T13:00Z
+#define MUSE_HARDFORK_0_4_TIME 1557320400
 #define MUSE_HARDFORK_0_4_VERSION hardfork_version( 0, 4 )
 #endif
