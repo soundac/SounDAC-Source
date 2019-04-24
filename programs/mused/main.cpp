@@ -150,20 +150,22 @@ int main(int argc, char** argv) {
                out_cfg << "# " << od->description() << "\n";
             boost::any store;
             if( !od->semantic()->apply_default(store) )
-               out_cfg << "# " << od->long_name() << " = \n";
+               out_cfg << "# " << od->long_name() << " =";
             else {
                auto example = od->format_parameter();
+               out_cfg << od->long_name() << " = ";
                if( example.empty() )
                   // This is a boolean switch
-                  out_cfg << od->long_name() << " = " << "false\n";
-               else {
+                  out_cfg << "false";
+               else if( example.size() >= 7 )
+               {
                   // The string is formatted "arg (=<interesting part>)"
                   example.erase(0, 6);
                   example.erase(example.length()-1);
-                  out_cfg << od->long_name() << " = " << example << "\n";
+                  out_cfg << example;
                }
             }
-            out_cfg << "\n";
+            out_cfg << "\n\n";
          }
          write_default_logging_config_to_stream(out_cfg);
          out_cfg.close();

@@ -483,44 +483,43 @@ void database::update_account_bandwidth( const account_object& a, uint32_t trx_s
    const auto& props = get_dynamic_global_properties();
    if( props.total_vesting_shares.amount > 0 )
    {
-      modify( a, [&]( account_object& acnt )
+      const auto now = head_block_time();
+      modify( a, [&props,&now,this,trx_size]( account_object& acnt )
       {
-         acnt.lifetime_bandwidth += trx_size * MUSE_BANDWIDTH_PRECISION;
-
-         auto now = head_block_time();
-         auto delta_time = (now - a.last_bandwidth_update).to_seconds();
+         auto delta_time = (now - acnt.last_bandwidth_update).to_seconds();
          uint64_t N = trx_size * MUSE_BANDWIDTH_PRECISION;
+         acnt.lifetime_bandwidth += N;
          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
             acnt.average_bandwidth = N;
-         else
+         else if( has_hardfork(MUSE_HARDFORK_0_4) )
          {
+            auto old_weight = acnt.average_bandwidth;
+            if( delta_time > 0 )
+               old_weight = old_weight * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
+            acnt.average_bandwidth = old_weight + N;
+         }
+         else
+         {  // TODO: remove after HF
             auto old_weight = acnt.average_bandwidth * (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS - delta_time);
             auto new_weight = delta_time * N;
             acnt.average_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
          }
 
-         if( props.total_vesting_shares.amount > 0 )
-         {
-            fc::uint128 account_vshares;
-            if( a.vesting_shares.amount > 0 )
-               account_vshares = fc::uint128( a.vesting_shares.amount.value );
-            else
-               account_vshares = fc::uint128( 1 );
-            //FC_ASSERT( a.vesting_shares.amount > 0, "only accounts with a positive vesting balance may transact" );
+         fc::uint128 account_vshares( get_effective_vesting_shares(acnt, VESTS_SYMBOL).amount.value );
+         if( account_vshares == 0 )
+            account_vshares = fc::uint128( 1 );
 
-            fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 account_average_bandwidth( acnt.average_bandwidth );
+         fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth );
 
-            fc::uint128 account_average_bandwidth( acnt.average_bandwidth );
-            fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth );
-
-            // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
-            FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
-                       "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
-                       ("account_vshares",account_vshares)
-                       ("account_average_bandwidth",account_average_bandwidth)
-                       ("max_virtual_bandwidth",max_virtual_bandwidth)
-                       ("total_vshares",total_vshares) );
-         }
+         // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
+         FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
+                    "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
+                    ("account_vshares",account_vshares)
+                    ("account_average_bandwidth",account_average_bandwidth)
+                    ("max_virtual_bandwidth",max_virtual_bandwidth)
+                    ("total_vshares",total_vshares) );
          acnt.last_bandwidth_update = now;
       } );
    }
@@ -532,10 +531,10 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
    const auto& props = get_dynamic_global_properties();
    if( props.total_vesting_shares.amount > 0 )
    {
-      modify( a, [&]( account_object& acnt )
+      const auto now = head_block_time();
+      modify( a, [&props,&now,this,trx_size]( account_object& acnt )
       {
-         auto now = head_block_time();
-         auto delta_time = (now - a.last_market_bandwidth_update).to_seconds();
+         auto delta_time = (now - acnt.last_market_bandwidth_update).to_seconds();
          uint64_t N = trx_size * MUSE_BANDWIDTH_PRECISION;
          if( delta_time >= MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS )
             acnt.average_market_bandwidth = N;
@@ -546,27 +545,31 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
             acnt.average_market_bandwidth =  (old_weight + new_weight) / (MUSE_BANDWIDTH_AVERAGE_WINDOW_SECONDS);
          }
 
-         if( props.total_vesting_shares.amount > 0 )
-         {
-            FC_ASSERT( a.vesting_shares.amount > 0, "only accounts with a positive vesting balance may transact" );
+         fc::uint128 account_vshares( get_effective_vesting_shares(acnt, VESTS_SYMBOL).amount.value );
+         FC_ASSERT( account_vshares > 0, "only accounts with a positive vesting balance may transact" );
 
-            fc::uint128 account_vshares(a.vesting_shares.amount.value);
-            fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
+         fc::uint128 total_vshares( props.total_vesting_shares.amount.value );
 
-            fc::uint128 account_average_bandwidth( acnt.average_market_bandwidth );
-            fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth / 10 ); /// only 10% of bandwidth can be market
+         fc::uint128 account_average_bandwidth( acnt.average_market_bandwidth );
+         fc::uint128 max_virtual_bandwidth( props.max_virtual_bandwidth / 10 ); /// only 10% of bandwidth can be market
 
-            // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
-            FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
-                       "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
-                       ("account_vshares",account_vshares)
-                       ("account_average_bandwidth",account_average_bandwidth)
-                       ("max_virtual_bandwidth",max_virtual_bandwidth)
-                       ("total_vshares",total_vshares) );
-         }
+         // account_vshares / total_vshares  > account_average_bandwidth / max_virtual_bandwidth
+         FC_ASSERT( (account_vshares * max_virtual_bandwidth) > (account_average_bandwidth * total_vshares),
+                    "account exceeded maximum allowed bandwidth per vesting share account_vshares: ${account_vshares} account_average_bandwidth: ${account_average_bandwidth} max_virtual_bandwidth: ${max_virtual_bandwidth} total_vesting_shares: ${total_vesting_shares}",
+                    ("account_vshares",account_vshares)
+                    ("account_average_bandwidth",account_average_bandwidth)
+                    ("max_virtual_bandwidth",max_virtual_bandwidth)
+                    ("total_vshares",total_vshares) );
          acnt.last_market_bandwidth_update = now;
       } );
    }
+}
+
+asset database::get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const
+{
+   if( vested_symbol == VESTS_SYMBOL )
+      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares;
+   FC_ASSERT( false, "Invalid symbol" );
 }
 
 uint32_t database::witness_participation_rate()const
@@ -2054,6 +2057,7 @@ void database::initialize_evaluators()
     register_evaluator<withdraw_vesting_evaluator>();
     register_evaluator<set_withdraw_vesting_route_evaluator>();
     register_evaluator<account_create_evaluator>();
+    register_evaluator<account_create_with_delegation_evaluator>();
     register_evaluator<account_update_evaluator>();
     register_evaluator<witness_update_evaluator>();
     register_evaluator<streaming_platform_update_evaluator>();
@@ -2097,6 +2101,7 @@ void database::initialize_evaluators()
     register_evaluator<friendship_evaluator>();
     register_evaluator<unfriend_evaluator>();
 
+    register_evaluator<delegate_vesting_shares_evaluator>();
 }
 
 void database::initialize_indexes()
@@ -2142,6 +2147,8 @@ void database::initialize_indexes()
 
    add_index< primary_index< content_vote_index > >();
    add_index< primary_index< balance_index > >();
+   add_index< primary_index< vesting_delegation_index > >();
+   add_index< primary_index< vesting_delegation_expiration_index > >();
 }
 
 void database::init_genesis( const genesis_state_type& initial_allocation )
@@ -2457,6 +2464,7 @@ void database::_apply_block( const signed_block& next_block )
    clear_expired_transactions();
    clear_expired_proposals();
    clear_expired_orders();
+   clear_expired_delegations();
    update_witness_schedule();
 
    update_median_feed();
@@ -2603,7 +2611,8 @@ void database::_apply_transaction(const signed_transaction& trx)
       auto get_comp_cont = [&]( const string& url ) { return &get_content(url).manage_comp; };
 
       trx.verify_authority( chain_id, get_active, get_owner, get_basic, get_master_cont, get_comp_cont,
-                            !has_hardfork( MUSE_HARDFORK_0_3 ) ? 1 : 2 );
+                            has_hardfork( MUSE_HARDFORK_0_4 ) ? 3 :
+                            has_hardfork( MUSE_HARDFORK_0_3 ) ? 2 : 1 );
    }
    flat_set<string> required; vector<authority> other;
    flat_set<string> required_content;
@@ -2809,9 +2818,32 @@ void database::update_virtual_supply()
    });
 }
 
+class push_proposal_nesting_guard {
+public:
+   push_proposal_nesting_guard( uint32_t& nesting_counter )
+      : orig_value(nesting_counter), counter(nesting_counter)
+   {
+      FC_ASSERT( counter < MUSE_MAX_MINERS * 2, "Max proposal nesting depth exceeded!" );
+      counter++;
+   }
+   ~push_proposal_nesting_guard()
+   {
+      if( --counter != orig_value )
+         elog( "Unexpected proposal nesting count value: ${n} != ${o}", ("n",counter)("o",orig_value) );
+   }
+private:
+   const uint32_t  orig_value;
+   uint32_t& counter;
+};
+
 void database::push_proposal(const proposal_object& proposal)
 { try {
    dlog( "Proposal: executing ${p}", ("p",proposal) );
+
+   push_proposal_nesting_guard guard( _push_proposal_nesting_depth );
+
+   if( _undo_db.size() >= _undo_db.max_size() )
+      _undo_db.set_max_size( _undo_db.size() + 1 );
 
    auto session = _undo_db.start_undo_session(true);
    _current_op_in_trx = 0;
@@ -3030,6 +3062,25 @@ void database::clear_expired_orders()
    }
 }
 
+void database::clear_expired_delegations()
+{
+   auto now = head_block_time();
+   const auto& delegations_by_exp = get_index_type< vesting_delegation_expiration_index >().indices().get< by_expiration >();
+   auto itr = delegations_by_exp.begin();
+   while( itr != delegations_by_exp.end() && itr->expiration < now )
+   {
+      modify( get_account( itr->delegator ), [&]( account_object& a )
+      {
+         a.delegated_vesting_shares -= itr->vesting_shares;
+      });
+
+      push_applied_operation( return_vesting_delegation_operation( itr->delegator, itr->vesting_shares ) );
+
+      remove( *itr );
+      itr = delegations_by_exp.begin();
+   }
+}
+
 void database::clear_expired_proposals()
 {
    if ( !has_hardfork(MUSE_HARDFORK_0_3) ) return;
@@ -3171,6 +3222,9 @@ void database::init_hardforks()
    FC_ASSERT( MUSE_HARDFORK_0_3 == 3, "Invalid hardfork configuration" );
    _hardfork_times[ MUSE_HARDFORK_0_3 ] = fc::time_point_sec( MUSE_HARDFORK_0_3_TIME );
    _hardfork_versions[ MUSE_HARDFORK_0_3 ] = MUSE_HARDFORK_0_3_VERSION;
+   FC_ASSERT( MUSE_HARDFORK_0_4 == 4, "Invalid hardfork configuration" );
+   _hardfork_times[ MUSE_HARDFORK_0_4 ] = fc::time_point_sec( MUSE_HARDFORK_0_4_TIME );
+   _hardfork_versions[ MUSE_HARDFORK_0_4 ] = MUSE_HARDFORK_0_4_VERSION;
 
    const auto& hardforks = hardfork_property_id_type()( *this );
    FC_ASSERT( hardforks.last_hardfork <= MUSE_NUM_HARDFORKS, "Chain knows of more hardforks than configuration", ("hardforks.last_hardfork",hardforks.last_hardfork)("MUSE_NUM_HARDFORKS",MUSE_NUM_HARDFORKS) );

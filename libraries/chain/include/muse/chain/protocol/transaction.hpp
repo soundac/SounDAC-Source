@@ -122,6 +122,17 @@ namespace muse { namespace chain {
                           const flat_set<string>& active_aprovals = flat_set<string>(),
                           const flat_set<string>& owner_aprovals = flat_set<string>(),
                           const flat_set<string>& basic_approvals = flat_set<string>());
+   void verify_authority_v3( const vector<operation>& ops, const flat_set<public_key_type>& sigs,
+                          const authority_getter& get_active,
+                          const authority_getter& get_owner,
+                          const authority_getter& get_basic,
+                          const authority_getter& get_master_content,
+                          const authority_getter& get_comp_content,
+                          bool allow_extra_sigs,
+                          uint32_t max_recursion = MUSE_MAX_SIG_CHECK_DEPTH,
+                          const flat_set<string>& active_aprovals = flat_set<string>(),
+                          const flat_set<string>& owner_aprovals = flat_set<string>(),
+                          const flat_set<string>& basic_approvals = flat_set<string>());
 
 
    struct annotated_signed_transaction : public signed_transaction {

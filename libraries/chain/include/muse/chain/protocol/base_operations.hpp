@@ -27,6 +27,24 @@ namespace muse { namespace chain {
       void get_required_active_authorities( flat_set<string>& a )const{ a.insert(creator); }
    };
 
+   struct account_create_with_delegation_operation : public base_operation
+   {
+      asset             fee;
+      asset             delegation;
+      string            creator;
+      string            new_account_name;
+      authority         owner;
+      authority         active;
+      authority         basic;
+      public_key_type   memo_key;
+      string            json_metadata;
+
+      extensions_type   extensions;
+
+      void validate()const;
+      void get_required_active_authorities( flat_set<string>& a )const{ a.insert(creator); }
+   };
+
    struct account_update_operation : public base_operation
    {
       string                        account;
@@ -631,6 +649,38 @@ namespace muse { namespace chain {
 
       void validate() const;
    };
+
+   /**
+    * Delegate vesting shares from one account to the other. The vesting shares are still owned
+    * by the original account, but content voting rights and bandwidth allocation are transferred
+    * to the receiving account. This sets the delegation to `vesting_shares`, increasing it or
+    * decreasing it as needed. (i.e. a delegation of 0 removes the delegation)
+    *
+    * When a delegation is removed the shares are placed in limbo for a week to prevent a satoshi
+    * of VESTS from voting on the same content twice.
+    */
+   struct delegate_vesting_shares_operation : public base_operation
+   {
+      string            delegator;        ///< The account delegating vesting shares
+      string            delegatee;        ///< The account receiving vesting shares
+      asset             vesting_shares;   ///< The amount of vesting shares delegated
+
+      extensions_type   extensions;             ///< Extensions. Not currently used.
+
+      void get_required_active_authorities( flat_set< string >& a ) const { a.insert( delegator ); }
+      void validate() const;
+   };
+
+   struct return_vesting_delegation_operation : public base_operation
+   {
+      return_vesting_delegation_operation() {}
+      return_vesting_delegation_operation( const string& a, const asset& v ) : account( a ), vesting_shares( v ) {}
+
+      string            account;
+      asset             vesting_shares;
+
+      void  validate()const { FC_ASSERT( false, "this is a virtual operation" ); }
+   };
 } } // muse::chain
 
 
@@ -648,6 +698,18 @@ FC_REFLECT( muse::chain::account_create_operation,
             (basic)
             (memo_key)
             (json_metadata) )
+
+FC_REFLECT( muse::chain::account_create_with_delegation_operation,
+            (fee)
+            (delegation)
+            (creator)
+            (new_account_name)
+            (owner)
+            (active)
+            (basic)
+            (memo_key)
+            (json_metadata)
+            (extensions) )
 
 FC_REFLECT( muse::chain::account_update_operation,
             (account)
@@ -686,3 +748,5 @@ FC_REFLECT( muse::chain::prove_authority_operation, (challenged)(require_owner) 
 FC_REFLECT( muse::chain::request_account_recovery_operation, (recovery_account)(account_to_recover)(new_owner_authority)(extensions) );
 FC_REFLECT( muse::chain::recover_account_operation, (account_to_recover)(new_owner_authority)(recent_owner_authority)(extensions) );
 FC_REFLECT( muse::chain::change_recovery_account_operation, (account_to_recover)(new_recovery_account)(extensions) );
+FC_REFLECT( muse::chain::delegate_vesting_shares_operation, (delegator)(delegatee)(vesting_shares) );
+FC_REFLECT( muse::chain::return_vesting_delegation_operation, (account)(vesting_shares) )

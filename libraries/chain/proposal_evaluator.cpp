@@ -44,12 +44,110 @@ namespace impl {
          template<typename T>
          void operator()( const T& v )const { /* do nothing by default */ }
 
+         void operator()( const muse::chain::witness_update_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to validate after HF
+               FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );
+         }
+
+         void operator()( const muse::chain::account_create_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json_metadata.size() > 0 ) // TODO: move to validate after HF
+               FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
+         }
+
+         void operator()( const muse::chain::account_create_with_delegation_evaluator& v )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Account creation with delegation is only allowed after Hardfork 0.4" );
+         }
+
+         void operator()( const muse::chain::account_update_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json_metadata.size() > 0 ) // TODO: move to validate after HF
+            {
+               FC_ASSERT( fc::json::is_valid(o.json_metadata), "JSON Metadata not valid JSON" );
+               FC_ASSERT( o.account != MUSE_TEMP_ACCOUNT );
+            }
+         }
+         void operator()( const muse::chain::escrow_transfer_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow transfer operation not enabled" );
+         }
+
+         void operator()( const muse::chain::escrow_dispute_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow dispute operation not enabled" );
+         }
+
+         void operator()( const muse::chain::escrow_release_operation& o )const {
+            // TODO: move to validate after HF
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "Escrow release operation not enabled" );
+         }
+
+         void operator()( const muse::chain::custom_json_operation& o )const {
+            if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) && o.json.size() > 0 ) // TODO: move to validate after HF
+               FC_ASSERT( fc::json::is_valid(o.json), "JSON data not valid JSON" );
+         }
+
+         void operator()( const muse::chain::report_over_production_operation& o )const {
+            FC_ASSERT( !_db.has_hardfork( MUSE_HARDFORK_0_4 ), "this operation is disabled" ); // TODO: move to validate after HF
+         }
+
+         void operator()( const muse::chain::delegate_vesting_shares_operation& v )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Vesting delegation is only allowed after hardfork 0.4" );
+         }
+
          void operator()( const muse::chain::proposal_create_operation& v )const {
-            for( const op_wrapper& op : v.proposed_ops )
-                op.op.visit( *this );
+            bool proposal_update_seen = false;
+            for (const op_wrapper &op : v.proposed_ops)
+            {
+               op.op.visit(*this);
+               if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) // TODO: move to proposal_create.validate after HF
+                       && op.op.which() == operation::tag<proposal_update_operation>().value )
+               {
+                  FC_ASSERT( !proposal_update_seen, "At most one proposal update can be nested in a proposal!" );
+                  proposal_update_seen = true;
+               }
+            }
+         }
+
+         void operator()( const muse::chain::withdraw_vesting_operation& v )const {
+            if( _db.head_block_time() > fc::time_point::now() - fc::seconds(15) // SOFT FORK
+                  || _db.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to withdraw_vesting_operation::validate after hf
+               FC_ASSERT( v.vesting_shares.amount >= 0, "Cannot withdraw a negative amount of VESTS!" );
          }
       private:
          database& _db;
+   };
+
+   // BitShares issue #1479: disallow updating/deleting future proposals
+   class hardfork_visitor_1479
+   {
+   public:
+      typedef void result_type;
+
+      uint64_t max_update_instance = 0;
+      uint64_t nested_update_count = 0;
+
+      template<typename T>
+      void operator()(const T &v) const {}
+
+      void operator()(const proposal_delete_operation &v)
+      {
+         if( nested_update_count == 0 || v.proposal.instance.value > max_update_instance )
+            max_update_instance = v.proposal.instance.value;
+         nested_update_count++;
+      }
+
+      void operator()(const proposal_update_operation &v)
+      {
+         if( nested_update_count == 0 || v.proposal.instance.value > max_update_instance )
+            max_update_instance = v.proposal.instance.value;
+         nested_update_count++;
+      }
+
+      // loop and self visit in proposals
+      void operator()(const muse::chain::proposal_create_operation &v)
+      {
+         for (const op_wrapper &op : v.proposed_ops)
+            op.op.visit(*this);
+      }
    };
 }
 
@@ -79,6 +177,8 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
 
    muse::chain::impl::proposal_op_visitor vtor(d);
    vtor( o );
+   impl::hardfork_visitor_1479 vtor_1479;
+   vtor_1479( o );
 
    transaction _proposed_trx;
    const auto& global_parameters = d.get_dynamic_global_properties();
@@ -97,7 +197,20 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
 
    dlog( "Proposal: ${op}", ("op",o) );
 
-   d.create<proposal_object>([&o, &_proposed_trx, &d](proposal_object& proposal) {
+   d.create<proposal_object>([&o, &_proposed_trx, &d, &vtor_1479](proposal_object& proposal) {
+      if( d.has_hardfork( MUSE_HARDFORK_0_4 ) )
+         FC_ASSERT( vtor_1479.nested_update_count == 0 || proposal.id.instance() > vtor_1479.max_update_instance,
+                    "Cannot update/delete a proposal with a future id!" );
+      else if( vtor_1479.nested_update_count > 0 && proposal.id.instance() <= vtor_1479.max_update_instance )
+      { // TODO: remove after hf if possible
+         // prevent approval
+         transfer_operation top;
+         top.from = MUSE_NULL_ACCOUNT;
+         top.to = MUSE_TEMP_ACCOUNT;
+         top.amount = asset( MUSE_MAX_SHARE_SUPPLY );
+         _proposed_trx.operations.emplace_back( top );
+         wlog( "Issue 1479: ${p}", ("p",proposal) );
+      }
       _proposed_trx.expiration = o.expiration_time;
       proposal.proposed_transaction = _proposed_trx;
       proposal.expiration_time = o.expiration_time;
@@ -123,6 +236,9 @@ void proposal_create_evaluator::do_apply(const proposal_create_operation& o)
          proposal.required_basic_approvals.erase( a );
       for( const string& o : proposal.required_owner_approvals )
          proposal.required_basic_approvals.erase( o );
+
+      if( d.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: remove after hf if possible
+         FC_ASSERT( other.size() == 0, "Cannot propose operations that require other authority!" );
 
       FC_ASSERT( proposal.required_basic_approvals.size() == 0
                  || ( required_active.size() == 0

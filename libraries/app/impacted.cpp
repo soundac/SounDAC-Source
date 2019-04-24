@@ -53,6 +53,12 @@ public:
       _impacted.insert( op.creator );
    }
 
+   void operator()( const account_create_with_delegation_operation& op )
+   {
+      _impacted.insert( op.new_account_name );
+      _impacted.insert( op.creator );
+   }
+
    void operator()( const account_update_operation& op )
    {
       _impacted.insert( op.account );
@@ -237,6 +243,17 @@ public:
    void operator()( const content_approve_operation& op )
    {
       _impacted.insert( op.approver );
+   }
+
+   void operator()( const delegate_vesting_shares_operation& op )
+   {
+      _impacted.insert( op.delegator );
+      _impacted.insert( op.delegatee );
+   }
+
+   void operator()( const return_vesting_delegation_operation& op )
+   {
+      _impacted.insert( op.account );
    }
 };
 

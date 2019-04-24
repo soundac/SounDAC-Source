@@ -280,6 +280,100 @@ void verify_authority_v2( const vector<operation>& ops, const flat_set<public_ke
          );
 } FC_CAPTURE_AND_RETHROW( (ops)(sigs) ) }
 
+void verify_authority_v3( const vector<operation>& ops, const flat_set<public_key_type>& sigs,
+                       const authority_getter& get_active,
+                       const authority_getter& get_owner,
+                       const authority_getter& get_basic,
+                       const authority_getter& get_master_content,
+                       const authority_getter& get_comp_content,
+                       bool allow_extra_sigs,
+                       uint32_t max_recursion_depth,
+                       const flat_set<string>& active_aprovals,
+                       const flat_set<string>& owner_approvals,
+                       const flat_set<string>& basic_approvals
+                       )
+{ try {
+   flat_set<string> required_active;
+   flat_set<string> required_owner;
+   flat_set<string> required_basic;
+   flat_set<string> required_master_content;
+   flat_set<string> required_comp_content;
+   vector<authority> other;
+
+   for( const auto& op : ops )
+      operation_get_required_authorities( op, required_active, required_owner, required_basic, required_master_content, required_comp_content, other );
+
+   // Active or owner authorities also cover basic authority
+   for( const string& a : required_active )
+      required_basic.erase( a );
+   for( const string& o : required_owner )
+      required_basic.erase( o );
+
+   FC_ASSERT( required_basic.size() == 0
+              || ( required_active.size() == 0
+                   && required_owner.size() == 0
+                   && required_master_content.size() == 0
+                   && required_comp_content.size() == 0
+                   && other.size() == 0 ),
+              "Cannot combine operations with basic approval and others!" );
+
+   sign_state s(sigs, required_basic.size() > 0 ? get_basic : get_active );
+   s.max_recursion = max_recursion_depth;
+   for( auto& id : basic_approvals )
+      s.approved_by.insert( id );
+   for( auto& id : active_aprovals )
+      s.approved_by.insert( id );
+   for( auto& id : owner_approvals )
+      s.approved_by.insert( id );
+
+   for( const auto& auth : other )
+   {
+      MUSE_ASSERT( s.check_authority(&auth), tx_missing_other_auth, "Missing Authority", ("auth",auth)("sigs",sigs) );
+   }
+
+   // fetch all of the top level authorities
+   for( auto id : required_basic )
+   {
+      MUSE_ASSERT( s.check_authority(id) ||
+                       s.check_authority(get_active(id)) ||
+                       s.check_authority(get_owner(id)),
+                                tx_missing_basic_auth, "Missing Basic Authority ${id}", ("id",id)("auth",*get_active(id))("owner",*get_owner(id)) );
+   }
+
+   for( auto id : required_active )
+   {
+      MUSE_ASSERT( s.check_authority(id) ||
+                       s.check_authority(get_owner(id)),
+                                tx_missing_active_auth, "Missing Active Authority ${id}", ("id",id)("auth",*get_active(id))("owner",*get_owner(id)) );
+   }
+
+   for( auto con : required_master_content )
+   {
+      MUSE_ASSERT( s.check_authority(get_master_content(con)),
+                       tx_missing_active_auth, "Missing Content Authority for content ${con}", ("con", con)("auth",*get_master_content(con)));
+   }
+
+   for( auto con : required_comp_content )
+   {
+      MUSE_ASSERT( s.check_authority(get_comp_content(con)),
+                       tx_missing_active_auth, "Missing Content Authority for content ${con}", ("con", con)("auth",*get_comp_content(con)));
+   }
+
+   for( auto id : required_owner )
+   {
+      MUSE_ASSERT( owner_approvals.find(id) != owner_approvals.end() ||
+                       s.check_authority(get_owner(id)),
+                       tx_missing_owner_auth, "Missing Owner Authority ${id}", ("id",id)("auth",*get_owner(id)) );
+   }
+
+   if( !allow_extra_sigs )
+      MUSE_ASSERT(
+         !s.remove_unused_signatures(),
+         tx_irrelevant_sig,
+         "Unnecessary signature(s) detected"
+         );
+} FC_CAPTURE_AND_RETHROW( (ops)(sigs) ) }
+
 flat_set<public_key_type> signed_transaction::get_signature_keys( const chain_id_type& chain_id )const
 { try {
    auto d = sig_digest( chain_id );
@@ -314,6 +408,12 @@ set<public_key_type> signed_transaction::get_required_signatures(
 
    vector<authority> other;
    get_required_authorities( required_active, required_owner, required_basic, required_master_content, required_comp_content, other );
+
+   // Active or owner authorities also cover basic authority
+   for( const string& a : required_active )
+      required_basic.erase( a );
+   for( const string& o : required_owner )
+      required_basic.erase( o );
 
    /** basic authority cannot be mixed with active authority in same transaction */
    if( required_basic.size() ) {
@@ -386,6 +486,9 @@ set<public_key_type> signed_transaction::minimize_required_signatures(
              case 2:
                 verify_authority_v2( operations, result, get_active, get_owner, get_basic, get_master_content, get_comp_content, false, max_recursion );
                 break;
+             case 3:
+                verify_authority_v3( operations, result, get_active, get_owner, get_basic, get_master_content, get_comp_content, false, max_recursion );
+                break;
              default:
                 FC_THROW_EXCEPTION( fc::invalid_arg_exception, "Unsupported version ${v}", ("v",version) );
          }
@@ -419,6 +522,11 @@ void signed_transaction::verify_authority(
          break;
       case 2:
          muse::chain::verify_authority_v2( operations, get_signature_keys( chain_id ),
+                                           get_active, get_owner, get_basic,
+                                           get_master_content, get_comp_content,
+                                           false, max_recursion );
+      case 3:
+         muse::chain::verify_authority_v3( operations, get_signature_keys( chain_id ),
                                            get_active, get_owner, get_basic,
                                            get_master_content, get_comp_content,
                                            false, max_recursion );
