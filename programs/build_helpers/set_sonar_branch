@@ -1,0 +1,54 @@
+#!/bin/sh
+
+# Relevant variables set by travis:
+# TRAVIS_BRANCH:
+# * for push builds, or builds not triggered by a pull request, this is the
+#   name of the branch.
+# * for builds triggered by a pull request this is the name of the branch
+#   targeted by the pull request.
+# * for builds triggered by a tag, this is the same as the name of the tag
+#   (see TRAVIS_TAG).
+# TRAVIS_PULL_REQUEST: The pull request number if the current job is a pull
+#   request, “false” if it’s not a pull request.
+# TRAVIS_TAG: If the current build is for a git tag, this variable is set to
+#   the tag’s name.
+
+if [ "$#" != 1 ]; then
+    echo "Usage: $0 <sonar-properties-file>" 1>&2
+    exit 1
+fi
+
+if [ -n "$TRAVIS_PULL_REQUEST" -a "$TRAVIS_PULL_REQUEST" != false ]; then
+    # PRs work per default
+    exec sed -i '/sonar\.branch/d' "$1"
+fi
+
+if [ -n "$TRAVIS_TAG" ]; then
+    # Tag build is either master or testnet
+    sed -i '/sonar\.branch/d' "$1"
+    case "$TRAVIS_TAG" in
+	*test*) echo "sonar.branch.target=testnet" >>"$1"; ;;
+	# default to master otherwise
+    esac
+else
+    case "$TRAVIS_BRANCH" in
+	master|develop|testnet|next_hardfork)
+	    # Long-lived branches stand for themselves
+	    exec sed -i '/sonar\.branch/d' "$1"
+	    ;;
+	test*release)
+	    # Testnet release branch will be merged into testnet
+	    sed -i '/sonar\.branch/d' "$1"
+	    exec echo "sonar.branch.target=testnet" >>"$1"
+	    ;;
+	*release*)
+	    # Release branch will be merged into default (master)
+	    exec sed -i '/sonar\.branch/d' "$1"
+	    ;;
+	#*)
+	    # All other branches should have sonar.branch.target in their
+	    # sonar.properties, leave it unchanged
+    esac
+fi
+
+exit 0
