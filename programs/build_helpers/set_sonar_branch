@@ -18,37 +18,56 @@ if [ "$#" != 1 ]; then
     exit 1
 fi
 
+clear_branch () {
+    sed -i '/sonar\.branch/d' "$1"
+}
+
+TARGET=
+FETCH=
+
 if [ -n "$TRAVIS_PULL_REQUEST" -a "$TRAVIS_PULL_REQUEST" != false ]; then
     # PRs work per default
-    exec sed -i '/sonar\.branch/d' "$1"
+    clear_branch "$1"
+    FETCH="$TRAVIS_BRANCH"
 fi
 
 if [ -n "$TRAVIS_TAG" ]; then
     # Tag build is either master or testnet
-    sed -i '/sonar\.branch/d' "$1"
+    clear_branch "$1"
     case "$TRAVIS_TAG" in
-	*test*) echo "sonar.branch.target=testnet" >>"$1"; ;;
-	# default to master otherwise
+	*test*) TARGET=testnet; FETCH=testnet; ;;
+	*)	FETCH=master; ;;
     esac
 else
     case "$TRAVIS_BRANCH" in
 	master|develop|testnet|next_hardfork)
 	    # Long-lived branches stand for themselves
-	    exec sed -i '/sonar\.branch/d' "$1"
+	    clear_branch "$1"
+	    FETCH="$TRAVIS_BRANCH"
 	    ;;
 	test*release)
 	    # Testnet release branch will be merged into testnet
-	    sed -i '/sonar\.branch/d' "$1"
-	    exec echo "sonar.branch.target=testnet" >>"$1"
+	    clear_branch "$1"
+	    TARGET=testnet
+	    FETCH=testnet
 	    ;;
 	*release*)
 	    # Release branch will be merged into default (master)
-	    exec sed -i '/sonar\.branch/d' "$1"
+	    clear_branch "$1"
+	    FETCH=master
 	    ;;
-	#*)
+	*)
 	    # All other branches should have sonar.branch.target in their
 	    # sonar.properties, leave it unchanged
+	    FETCH="$( grep 'sonar\.branch\.target' "$1" | sed 's=^.*[:=] *==' )"
     esac
+fi
+
+if [ -n "$TARGET" ]; then
+    echo "sonar.branch.target=$TARGET" >>"$1"
+fi
+if [ -n "$FETCH" ]; then
+    git fetch --depth=50 origin "$FETCH"
 fi
 
 exit 0
