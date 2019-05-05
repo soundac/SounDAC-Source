@@ -74,8 +74,11 @@ echo "Branch target '$TARGET', fetch target '$FETCH'"
 if [ -n "$TARGET" ]; then
     echo "sonar.branch.target=$TARGET" >>"$1"
 fi
-if [ -n "$FETCH" ]; then
-    git fetch --depth=50 origin "$FETCH:$FETCH"
-fi
+#if [ -n "$FETCH" ]; then
+    # Unfortunately this leads to sonar failing. Apparently it needs a full
+    # clone, not a shallow one. Since our repo is somewhat large and this is
+    # only required for blame annotations, disabled for now.
+    #git fetch --depth=50 origin "$FETCH:$FETCH"
+#fi
 
 exit 0
