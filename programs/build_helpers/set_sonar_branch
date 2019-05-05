@@ -30,9 +30,7 @@ if [ -n "$TRAVIS_PULL_REQUEST" -a "$TRAVIS_PULL_REQUEST" != false ]; then
     echo "Detected PR '$TRAVIS_PULL_REQUEST'"
     clear_branch "$1"
     FETCH="$TRAVIS_BRANCH"
-fi
-
-if [ -n "$TRAVIS_TAG" ]; then
+elif [ -n "$TRAVIS_TAG" ]; then
     # Tag build is either master or testnet
     echo "Detected tag '$TRAVIS_TAG'"
     clear_branch "$1"
