@@ -836,7 +836,7 @@ application::~application()
 #ifdef IS_TEST_NET
 static const string DEFAULT_CHECKPOINT = "";
 #else
-static const string DEFAULT_CHECKPOINT = "[14000000,\"00d59f8062cc96d8e6140129bec3fc991dfbcefe\"]";
+static const string DEFAULT_CHECKPOINT = "[17000000,\"0103664068c5c0f10517089e13d23f77e911878a\"]";
 #endif
 
 void application::set_program_options(boost::program_options::options_description& command_line_options,

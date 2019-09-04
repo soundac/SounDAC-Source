@@ -782,7 +782,7 @@ vector<content_object> database_api_impl::get_content_by_uploader(string uploade
    const auto& idx= _db.get_index_type<content_index>().indices().get< by_uploader >();
    vector <content_object> result;
     
-   auto itr = idx.lower_bound( std::make_tuple( uploader, content_id_type(-1) ) );
+   auto itr = idx.lower_bound( std::make_tuple( uploader, content_id_type((1ULL<<48)-1) ) );
    while( itr != idx.end() && itr->uploader == uploader && result.size() < 1000 )
    {
       result.push_back (*itr);

@@ -525,6 +525,7 @@ void signed_transaction::verify_authority(
                                            get_active, get_owner, get_basic,
                                            get_master_content, get_comp_content,
                                            false, max_recursion );
+         break;
       case 3:
          muse::chain::verify_authority_v3( operations, get_signature_keys( chain_id ),
                                            get_active, get_owner, get_basic,
