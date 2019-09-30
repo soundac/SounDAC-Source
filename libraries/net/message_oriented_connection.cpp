@@ -146,8 +146,8 @@ namespace graphene { namespace net {
     public:
       explicit THelper(std::atomic_bool* flag) : Flag(flag)
       {
-      FC_ASSERT(*flag == false, "Only one thread at time can visit it");
-      *flag = true;
+         bool expected = false;
+         FC_ASSERT( flag->compare_exchange_strong( expected, true ), "Only one thread at time can visit it");
       }
       ~THelper()
       {
