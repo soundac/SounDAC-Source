@@ -1,5 +1,6 @@
 #pragma once
 #include <muse/app/state.hpp>
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/chain/protocol/types.hpp>
 
 #include <muse/chain/database.hpp>
