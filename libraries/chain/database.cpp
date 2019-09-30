@@ -1641,20 +1641,9 @@ asset database::process_content_cashout( const asset& content_reward )
    asset total_payout = has_hardfork( MUSE_HARDFORK_0_2 ) ? content_reward : get_content_reward();
 
    const auto& ridx = get_index_type<report_index>().indices().get<by_created>();
+   const auto& dgpo = get_dynamic_global_properties();
    auto itr = ridx.begin();
-   std::set<account_id_type> customers;
-   uint64_t full_time = 0;
-   while ( itr != ridx.end() && itr->created <= now )  // FIXME: doesn't scale
-   {
-      if( customers.insert(itr->consumer).second )
-      {
-          const auto& user = get<account_object>( itr->consumer );
-          full_time += std::min( user.total_listening_time, uint32_t(3600) );
-      }
-      ++itr;
-   }
    flat_map<account_id_type, uint32_t> listening_times;
-   itr = ridx.begin();
    while ( itr != ridx.end() && itr->created <= cashing_time )
    {
       const account_object & consumer = get<account_object>( itr->consumer );
@@ -1662,9 +1651,9 @@ asset database::process_content_cashout( const asset& content_reward )
       FC_ASSERT( consumer.total_listening_time > 0 );
       asset pay_reserve = total_payout * itr->play_time;
       if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
-         pay_reserve = pay_reserve / customers.size();
+         pay_reserve = pay_reserve / dgpo.active_users;
       else
-         pay_reserve = pay_reserve * std::min( consumer.total_listening_time, uint32_t(3600) ) / full_time;
+         pay_reserve = pay_reserve * std::min( consumer.total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
       pay_reserve = pay_reserve / consumer.total_listening_time;
       paid += pay_to_content(itr->content, pay_reserve, itr->streaming_platform );
       auto listened = listening_times.find(consumer.id);
@@ -1679,16 +1668,42 @@ asset database::process_content_cashout( const asset& content_reward )
       remove(*itr);
       itr = ridx.begin();
    }
-   if( has_hardfork( MUSE_HARDFORK_0_2 ) )
+
+   uint32_t active_users_delta = 0;
+   uint32_t full_time_users_delta = 0;
+   uint32_t total_listening_time_delta = 0;
+   uint32_t full_users_time_delta = 0;
+   for ( const auto& listened : listening_times )
    {
-      for ( const auto& listened : listening_times )
-      {
-         const account_object& consumer = get<account_object>( listened.first );
+      const account_object& consumer = get<account_object>( listened.first );
+      const auto time_before = consumer.total_listening_time;
+      if( has_hardfork( MUSE_HARDFORK_0_2 ) )
          modify<account_object>(consumer, [&listened](account_object & a){
             a.total_listening_time -= listened.second;
          });
+      if( consumer.total_listening_time < 3600 )
+      {
+         if( consumer.total_listening_time == 0 )
+            ++active_users_delta;
+         if( time_before >= 3600 )
+         {
+            ++full_time_users_delta;
+            full_users_time_delta += 3600 - consumer.total_listening_time;
+         }
+         else
+            full_users_time_delta += listened.second;
       }
+      total_listening_time_delta += listened.second;
    }
+   if( total_listening_time_delta > 0 || full_users_time_delta > 0
+         || full_time_users_delta > 0 || active_users_delta > 0 )
+      modify( dgpo, [total_listening_time_delta,full_users_time_delta,full_time_users_delta,active_users_delta]
+                    ( dynamic_global_property_object& o ) {
+         o.active_users -= active_users_delta;
+         o.full_time_users -= full_time_users_delta;
+         o.total_listening_time -= total_listening_time_delta;
+         o.full_users_time -= full_users_time_delta;
+      });
    return paid;
 } FC_LOG_AND_RETHROW() }
 

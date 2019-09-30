@@ -66,11 +66,28 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
         }
    });
 
-   db().modify< account_object >(consumer, [&]( account_object &a){
+   const auto prev_listening_time = consumer.total_listening_time;
+   db().modify< account_object >(consumer, [&o]( account_object &a){
         a.total_listening_time += o.play_time;
    });
 
-   db().modify< content_object >(content, [&] (content_object &c){
+   db().modify( db().get_dynamic_global_properties(), [prev_listening_time, &o] ( dynamic_global_property_object &dgpo ){
+      if( prev_listening_time < 3600 )
+      {
+         if( prev_listening_time == 0 )
+            ++dgpo.active_users;
+         if( 3600 - prev_listening_time > o.play_time )
+            dgpo.full_users_time += o.play_time;
+         else
+         {
+            dgpo.full_users_time += 3600 - prev_listening_time;
+            ++dgpo.full_time_users;
+         }
+      }
+      dgpo.total_listening_time += o.play_time;
+   });
+
+   db().modify< content_object >(content, [] (content_object &c){
         ++c.times_played;
         ++c.times_played_24;
    });

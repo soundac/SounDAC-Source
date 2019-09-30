@@ -91,7 +91,6 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
       acc.last_owner_update = fc::time_point_sec::min();
       acc.created = props.time;
       acc.last_vote_time = props.time;
-      acc.mined = false;
 
       acc.recovery_account = o.creator;
 
@@ -164,7 +163,6 @@ void account_create_with_delegation_evaluator::do_apply( const account_create_wi
       acc.last_owner_update = fc::time_point_sec::min();
       acc.created = props.time;
       acc.last_vote_time = props.time;
-      acc.mined = false;
       acc.received_vesting_shares = o.delegation;
 
       #ifndef IS_LOW_MEM
@@ -348,18 +346,14 @@ void withdraw_vesting_evaluator::do_apply( const withdraw_vesting_operation& o )
     FC_ASSERT( account.vesting_shares >= asset( 0, VESTS_SYMBOL ) );
     FC_ASSERT( account.vesting_shares - account.delegated_vesting_shares >= o.vesting_shares, "Account does not have sufficient Steem Power for withdraw." );
 
-    if( !account.mined )  {
-      const auto& props = db().get_dynamic_global_properties();
-      const witness_schedule_object& wso = db().get_witness_schedule_object();
+    const auto& props = db().get_dynamic_global_properties();
+    const witness_schedule_object& wso = db().get_witness_schedule_object();
 
-      asset min_vests = wso.median_props.account_creation_fee * props.get_vesting_share_price();
-      min_vests.amount.value *= 10;
+    asset min_vests = wso.median_props.account_creation_fee * props.get_vesting_share_price();
+    min_vests.amount.value *= 10;
 
-      FC_ASSERT( account.vesting_shares > min_vests,
-                 "Account registered by another account requires 10x account creation fee worth of Vestings before it can power down" );
-    }
-
-
+    FC_ASSERT( account.vesting_shares > min_vests,
+               "Account registered by another account requires 10x account creation fee worth of Vestings before it can power down" );
 
     if( o.vesting_shares.amount <= 0 ) {
        if( o.vesting_shares.amount == 0 ) // SOFT FORK, remove after HF 4
