@@ -31,16 +31,13 @@ namespace muse { namespace chain {
          time_point_sec  last_owner_update;
 
          time_point_sec  created;
-         bool            mined = true;
          bool            owner_challenged = false;
          bool            active_challenged = false;
          time_point_sec  last_owner_proved = time_point_sec::min();
          time_point_sec  last_active_proved = time_point_sec::min();
          string          recovery_account = "";
          time_point_sec  last_account_recovery;
-         uint32_t        comment_count = 0;
          uint32_t        lifetime_vote_count = 0;
-         uint32_t        post_count = 0;
 
          uint64_t        score=0;
          
@@ -69,9 +66,6 @@ namespace muse { namespace chain {
          fc::time_point_sec mbd_seconds_last_update; ///< the last time the mbd_seconds was updated
          fc::time_point_sec mbd_last_interest_payment; ///< used to pay interest at most once per month
          ///@}
-
-         share_type      curation_rewards = 0;
-         share_type      posting_rewards = 0;
 
          asset           vesting_shares = asset( 0, VESTS_SYMBOL ); ///< total vesting shares held by this account, controls its voting power
          asset           delegated_vesting_shares = asset( 0, VESTS_SYMBOL );
@@ -104,17 +98,12 @@ namespace muse { namespace chain {
 
          uint64_t        average_market_bandwidth  = 0;
          time_point_sec  last_market_bandwidth_update;
-         time_point_sec  last_post;
-         time_point_sec  last_root_post = fc::time_point_sec::min();
-         uint32_t        post_bandwidth = 0;
 
          /**
           *  Used to track activity rewards, updated on every post and comment
           */
          ///@{
          time_point_sec  last_active;
-         fc::uint128_t   activity_shares;
-         time_point_sec  last_activity_payout;
          ///@}
 
 
@@ -254,12 +243,10 @@ namespace muse { namespace chain {
 
    struct by_name;
    struct by_proxy;
-   struct by_last_post;
    struct by_next_vesting_withdrawal;
    struct by_muse_balance;
    struct by_smp_balance;
    struct by_smd_balance;
-   struct by_post_count;
    struct by_vote_count;
    struct by_last_owner_update;
 
@@ -285,13 +272,6 @@ namespace muse { namespace chain {
                member<object, object_id_type, &object::id >
             > /// composite key by_next_vesting_withdrawal
          >,
-         ordered_unique< tag< by_last_post >,
-            composite_key< account_object,
-               member<account_object, time_point_sec, &account_object::last_post >,
-               member<object, object_id_type, &object::id >
-            >,
-            composite_key_compare< std::greater< time_point_sec >, std::less< object_id_type > >
-         >,
          ordered_unique< tag< by_muse_balance >,
             composite_key< account_object,
                member<account_object, asset, &account_object::balance >,
@@ -312,13 +292,6 @@ namespace muse { namespace chain {
                member<object, object_id_type, &object::id >
             >,
             composite_key_compare< std::greater< asset >, std::less< object_id_type > >
-         >,
-         ordered_unique< tag< by_post_count >,
-            composite_key< account_object,
-               member<account_object, uint32_t, &account_object::post_count >,
-               member<object, object_id_type, &object::id >
-            >,
-            composite_key_compare< std::greater< uint32_t >, std::less< object_id_type > >
          >,
          ordered_unique< tag< by_vote_count >,
             composite_key< account_object,
@@ -492,20 +465,18 @@ namespace muse { namespace chain {
 }}
 FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (name)(owner)(active)(basic)(memo_key)(json_metadata)(proxy)(last_owner_update)
-                    (created)(mined)(total_listening_time)
+                    (created)(total_listening_time)
                     (owner_challenged)(active_challenged)(last_owner_proved)(last_active_proved)(recovery_account)(last_account_recovery)
-                    (comment_count)(lifetime_vote_count)(post_count)(voting_power)(last_vote_time)
+                    (lifetime_vote_count)(voting_power)(last_vote_time)
                     (balance)
                     (mbd_balance)(mbd_seconds)(mbd_seconds_last_update)(mbd_last_interest_payment)
                     (vesting_shares)(delegated_vesting_shares)(received_vesting_shares)
                     (vesting_withdraw_rate)(next_vesting_withdrawal)(withdrawn)(to_withdraw)(withdraw_routes)
-                    (curation_rewards)
-                    (posting_rewards)(score)
+                    (score)
                     (proxied_vsf_votes)(witnesses_voted_for)(streaming_platforms_voted_for)
                     (average_bandwidth)(lifetime_bandwidth)(last_bandwidth_update)
                     (average_market_bandwidth)(last_market_bandwidth_update)
-                    (last_post)(last_root_post)(post_bandwidth)
-                    (last_active)(activity_shares)(last_activity_payout)
+                    (last_active)
                     (friends)(second_level)(waiting)
                   )
 FC_REFLECT_DERIVED( muse::chain::vesting_delegation_object, (graphene::db::object),
