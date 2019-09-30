@@ -2076,6 +2076,8 @@ void database::initialize_evaluators()
     register_evaluator<account_update_evaluator>();
     register_evaluator<witness_update_evaluator>();
     register_evaluator<streaming_platform_update_evaluator>();
+    register_evaluator<request_stream_reporting_evaluator>();
+    register_evaluator<cancel_stream_reporting_evaluator>();
     register_evaluator<account_witness_vote_evaluator>();
     register_evaluator<account_streaming_platform_vote_evaluator>();
     register_evaluator<account_witness_proxy_evaluator>();
@@ -2129,6 +2131,7 @@ void database::initialize_indexes()
    acnt_index->add_secondary_index<account_member_index>();
 
    add_index< primary_index< streaming_platform_index > >();
+   add_index< primary_index< stream_report_request_index > >();
    add_index< primary_index< report_index > >();
    add_index< primary_index< witness_index > >();
    add_index< primary_index< streaming_platform_vote_index > >();

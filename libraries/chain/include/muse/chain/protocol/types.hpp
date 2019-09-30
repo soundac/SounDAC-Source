@@ -131,7 +131,8 @@ namespace muse { namespace chain {
       impl_content_stats_object_type,
       impl_balance_object_type,
       impl_vesting_delegation_object_type,
-      impl_vesting_delegation_expiration_object_type
+      impl_vesting_delegation_expiration_object_type,
+      impl_stream_report_request_object_type
    };
 
    class operation_object;
@@ -142,6 +143,7 @@ namespace muse { namespace chain {
    class witness_vote_object;
    class streaming_platform_object;
    class streaming_platform_vote_object;
+   class stream_report_request_object;
    class report_object;
    class account_object;
    class feed_history_object;
@@ -200,6 +202,7 @@ namespace muse { namespace chain {
    typedef object_id< implementation_ids, impl_balance_object_type,                          balance_object>                           balance_id_type;
    typedef object_id< implementation_ids, impl_vesting_delegation_object_type,               vesting_delegation_object>                vesting_delegation_id_type;
    typedef object_id< implementation_ids, impl_vesting_delegation_expiration_object_type,    vesting_delegation_expiration_object>     vesting_delegation_expiration_object_id_type;
+   typedef object_id< implementation_ids, impl_stream_report_request_object_type,            stream_report_request_object>             stream_report_request_object_id_type;
 
 
    typedef fc::ripemd160                                        block_id_type;
@@ -345,6 +348,7 @@ FC_REFLECT_ENUM( muse::chain::impl_object_type,
                  (impl_balance_object_type)
                  (impl_vesting_delegation_object_type)
                  (impl_vesting_delegation_expiration_object_type)
+                 (impl_stream_report_request_object_type)
                )
 
 FC_REFLECT_TYPENAME( muse::chain::share_type )

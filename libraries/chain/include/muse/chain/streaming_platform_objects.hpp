@@ -12,12 +12,6 @@ namespace muse { namespace chain {
 
    using namespace graphene::db;
 
-
-   /**
-    *  All witnesses with at least 1% net positive approval and
-    *  at least 2 weeks old are able to participate in block
-    *  production.
-    */
    class streaming_platform_object : public abstract_object<streaming_platform_object>
    {
       public:
@@ -28,22 +22,27 @@ namespace muse { namespace chain {
          string          owner;
          time_point_sec  created;
          string          url;
-         //uint32_t        total_missed = 0;
-         //uint64_t        last_aslot = 0;
-         //uint64_t        last_confirmed_block_num = 0;
 
          /**
           *  The total votes for this streaming platform. 
           */
          share_type      votes;
 
-         /**
-          * This field represents the Muse blockchain version the witness is running.
-          */
-
          streaming_platform_id_type get_id()const { return id; }
    };
 
+   class stream_report_request_object : public abstract_object<stream_report_request_object>
+   {
+      public:
+         static const uint8_t space_id = implementation_ids;
+         static const uint8_t type_id  = impl_stream_report_request_object_type;
+
+         string   requestor;
+         string   reporter;
+         uint16_t reward_pct;
+
+         streaming_platform_id_type get_id()const { return id; }
+   };
 
    class streaming_platform_vote_object : public abstract_object<streaming_platform_vote_object>
    {
@@ -112,9 +111,24 @@ namespace muse { namespace chain {
       > // indexed_by
    > streaming_platform_vote_multi_index_type;
 
+   struct by_platforms;
+   typedef multi_index_container<
+      stream_report_request_object,
+      indexed_by<
+         ordered_unique< tag<by_id>, member< object, object_id_type, &object::id > >,
+         ordered_unique< tag<by_platforms>,
+            composite_key< stream_report_request_object,
+               member<stream_report_request_object, string, &stream_report_request_object::requestor >,
+               member<stream_report_request_object, string, &stream_report_request_object::reporter >
+            >,
+            composite_key_compare< std::less< string >, std::less< string > >
+         >
+      > // indexed_by
+   > stream_report_request_multi_index_type;
 
    typedef generic_index< streaming_platform_object,         streaming_platform_multi_index_type>             streaming_platform_index;
    typedef generic_index< streaming_platform_vote_object,    streaming_platform_vote_multi_index_type >       streaming_platform_vote_index;
+   typedef generic_index< stream_report_request_object,      stream_report_request_multi_index_type>          stream_report_request_index;
    
    struct by_consumer;
    struct by_content;
@@ -153,6 +167,8 @@ FC_REFLECT_DERIVED( muse::chain::streaming_platform_object, (graphene::db::objec
                     (url)(votes)
                   )
 FC_REFLECT_DERIVED( muse::chain::streaming_platform_vote_object, (graphene::db::object), (streaming_platform)(account) )
+
+FC_REFLECT_DERIVED( muse::chain::stream_report_request_object, (graphene::db::object), (requestor)(reporter)(reward_pct) )
 
 FC_REFLECT_DERIVED( muse::chain::report_object, (graphene::db::object), 
                     (streaming_platform)

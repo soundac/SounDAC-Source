@@ -9,7 +9,6 @@
 
 namespace muse { namespace chain {
 
-
 void streaming_platform_update_evaluator::do_apply( const streaming_platform_update_operation& o )
 {
    const auto& sp_account=db().get_account( o.owner ); // verify owner exists
@@ -40,6 +39,45 @@ void streaming_platform_update_evaluator::do_apply( const streaming_platform_upd
       db().pay_fee( sp_account, o.fee );
 
    }
+}
+
+void request_stream_reporting_evaluator::do_apply( const request_stream_reporting_operation& o )
+{
+   FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet!" );
+
+   const auto& by_streaming_platform_name_idx = db().get_index_type< streaming_platform_index >().indices().get< by_name >();
+   const auto requestor_sp = by_streaming_platform_name_idx.find( o.requestor );
+   FC_ASSERT( requestor_sp != by_streaming_platform_name_idx.end(), "No such streaming platform '${p}'",
+              ("p",o.requestor) );
+   const auto reporter_sp = by_streaming_platform_name_idx.find( o.reporter );
+   FC_ASSERT( reporter_sp != by_streaming_platform_name_idx.end(), "No such streaming platform '${p}'",
+              ("p",o.reporter) );
+
+   const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
+   if( srr != by_platforms_idx.end() )
+   {
+      FC_ASSERT( srr->reward_pct != o.reward_pct, "Entry already exists!" );
+      db().modify( *srr, [&o]( stream_report_request_object& s ) {
+           s.reward_pct = o.reward_pct;
+      });
+   }
+   else
+      db().create< stream_report_request_object >( [&o]( stream_report_request_object& s ) {
+           s.requestor  = o.requestor;
+           s.reporter   = o.reporter;
+           s.reward_pct = o.reward_pct;
+      });
+}
+
+void cancel_stream_reporting_evaluator::do_apply( const cancel_stream_reporting_operation& o )
+{
+   FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet!" );
+
+   const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
+   FC_ASSERT( srr != by_platforms_idx.end(), "Can't cancel non-existant request!" );
+   db().remove( *srr );
 }
 
 void streaming_platform_report_evaluator::do_apply ( const streaming_platform_report_operation& o )
