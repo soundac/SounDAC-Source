@@ -214,6 +214,8 @@ public:
    {
       _impacted.insert( op.streaming_platform );
       _impacted.insert( op.consumer );
+      if( op.ext.value.spinning_platform.valid() )
+         _impacted.insert( *op.ext.value.spinning_platform );
    }
 
    void operator()( const friendship_operation& op )

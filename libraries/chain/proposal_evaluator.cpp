@@ -101,6 +101,11 @@ namespace impl {
             FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet" );
          }
 
+         void operator()( const muse::chain::streaming_platform_report_operation& o )const {
+            if( !_db.has_hardfork( MUSE_HARDFORK_0_5 ) )
+               FC_ASSERT( !o.ext.value.spinning_platform.valid(), "Not allowed yet" );
+         }
+
          void operator()( const muse::chain::proposal_create_operation& v )const {
             bool proposal_update_seen = false;
             for (const op_wrapper &op : v.proposed_ops)

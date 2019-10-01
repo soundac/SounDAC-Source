@@ -334,11 +334,18 @@ struct account_streaming_platform_vote_operation : public base_operation
  */
 struct streaming_platform_report_operation : public base_operation
 {
+   struct report_extensions
+   {
+      optional<string> spinning_platform;
+   };
    string streaming_platform; //<Platform submiting the report
    string consumer; //<Consumer of the art piece
    string content; //<URL of the art piece
-   uint64_t play_time; //<How long the consumer listened to it (in seconds))
    string playlist_creator;//<Not used
+   uint32_t play_time = 0; //<How long the consumer listened to it (in seconds))
+   uint16_t dummy1 = 0;
+   uint8_t dummy2 = 0;
+   extension<report_extensions> ext;
 
    void validate() const;
    void get_required_active_authorities(  flat_set<string>& a )const{ a.insert(streaming_platform); }
@@ -409,7 +416,9 @@ FC_REFLECT( muse::chain::unfriend_operation, (who)(whom) )
 FC_REFLECT( muse::chain::content_reward_operation, (payee)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::curate_reward_operation, (curator)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::playing_reward_operation, (platform)(url)(mbd_payout)(vesting_payout) )
-FC_REFLECT( muse::chain::streaming_platform_report_operation, (streaming_platform)(consumer)(content)(playlist_creator)(play_time))
+FC_REFLECT( muse::chain::streaming_platform_report_operation::report_extensions, (spinning_platform) )
+FC_REFLECT( muse::chain::streaming_platform_report_operation,
+            (streaming_platform)(consumer)(content)(playlist_creator)(play_time)(dummy1)(dummy2)(ext) )
 FC_REFLECT( muse::chain::account_streaming_platform_vote_operation, (account)(streaming_platform)(approve))
 FC_REFLECT( muse::chain::streaming_platform_update_operation, (owner)(url)(fee))
 FC_REFLECT( muse::chain::request_stream_reporting_operation, (requestor)(reporter)(reward_pct)(ext) )

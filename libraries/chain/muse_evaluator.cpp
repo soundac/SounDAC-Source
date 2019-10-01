@@ -84,23 +84,37 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
 {
    const auto& consumer = db().get_account( o.consumer );
    FC_ASSERT( o.play_time + consumer.total_listening_time <= 86400, "User cannot cannot listen for more than 86400 seconds per day" );
-   const auto& spidx = db().get_index_type<streaming_platform_index>().indices().get<by_name>();
-   auto spitr = spidx.find(o.streaming_platform);
-   FC_ASSERT(spitr != spidx.end());
-   const auto& sp = * spitr;
+   const auto& stp = db().get_streaming_platform( o.streaming_platform );
+   const streaming_platform_object* spp = nullptr;
+   uint16_t reward_pct = 0;
+   if( o.ext.value.spinning_platform.valid() )
+   {
+      FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "spinning_platform not allowed yet!" );
+      spp = &db().get_streaming_platform( *o.ext.value.spinning_platform );
+      const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+      const auto srr = by_platforms_idx.find( boost::make_tuple( *o.ext.value.spinning_platform,
+                                                                 o.streaming_platform ) );
+      FC_ASSERT( srr != by_platforms_idx.end(), "spinning_platform has not requested reporting from you" );
+      reward_pct = srr->reward_pct;
+   }
 
    FC_ASSERT ( db().is_voted_streaming_platform( o.streaming_platform ));
    const auto& content = db().get_content( o.content );
    FC_ASSERT( !content.disabled );
 
-   db().create< report_object>( [&](report_object& ro) {
+   db().create< report_object>( [&consumer,&stp,this,&content,&o,spp,reward_pct](report_object& ro) {
         ro.consumer = consumer.id;
-        ro.streaming_platform = sp.id;
+        ro.streaming_platform = stp.id;
         ro.created = db().head_block_time();
         ro.content = content.id;
         ro.play_time = o.play_time;
         if( o.playlist_creator.size() > 0 ){
            ro.playlist_creator = db().get_account(o.playlist_creator).id;
+        }
+        if( spp )
+        {
+           ro.spinning_platform = spp->id;
+           ro.reward_pct = reward_pct;
         }
    });
 

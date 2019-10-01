@@ -66,6 +66,8 @@ namespace muse { namespace chain {
          time_point_sec created;
          uint32_t play_time;
          optional<account_id_type> playlist_creator;
+         optional<streaming_platform_id_type> spinning_platform;
+         optional<uint16_t> reward_pct;
    };
 
   /**
