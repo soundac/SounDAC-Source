@@ -2025,4 +2025,158 @@ BOOST_AUTO_TEST_CASE( disable_test )
 
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( request_reporting_test )
+{ try {
+   ACTORS( (alice)(sarah)(sharon)(suzie) );
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "sharon", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "sharon";
+      spuo.url = "http://bobstracks.com";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+
+   }
+
+   const auto& by_platforms_idx = db.get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   BOOST_CHECK( by_platforms_idx.empty() );
+
+   {
+   // not allowed yet
+   request_stream_reporting_operation rsr;
+   rsr.requestor = "sarah";
+   rsr.reporter = "suzie";
+   rsr.reward_pct = 50 * MUSE_1_PERCENT;
+   rsr.validate();
+   trx.operations.push_back( rsr );
+   // Can't test - all HF's are applied automatically on test startup
+   //BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+   generate_blocks( time_point_sec( MUSE_HARDFORK_0_5_TIME ) );
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // bad percentage
+   rsr.reward_pct = 101 * MUSE_1_PERCENT;
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reward_pct = 50 * MUSE_1_PERCENT;
+
+   // bad requestor
+   rsr.requestor = "nope.";
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.requestor = "sarah";
+
+   // bad reporter
+   rsr.reporter = "nope.";
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reporter = "suzie";
+
+   // requestor is not a sp
+   rsr.requestor = "alice";
+   rsr.validate();
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.requestor = "sarah";
+
+   // reporter is not a sp
+   rsr.reporter = "alice";
+   rsr.validate();
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reporter = "suzie";
+
+   // works
+   trx.operations[0] = rsr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+
+   BOOST_CHECK_EQUAL( 1, by_platforms_idx.size() );
+   auto first = by_platforms_idx.begin();
+   BOOST_CHECK_EQUAL( "sarah", first->requestor );
+   BOOST_CHECK_EQUAL( "suzie", first->reporter );
+   BOOST_CHECK_EQUAL( 50 * MUSE_1_PERCENT, first->reward_pct );
+
+   // no-op update fails
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+   // update works
+   rsr.reward_pct = 33 * MUSE_1_PERCENT;
+   trx.operations[0] = rsr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+   BOOST_CHECK_EQUAL( 33 * MUSE_1_PERCENT, first->reward_pct );
+   }
+
+   {
+   cancel_stream_reporting_operation csr;
+   csr.requestor = "sarah";
+   csr.reporter = "suzie";
+   csr.validate();
+
+   // bad requestor
+   csr.requestor = "nope.";
+   BOOST_CHECK_THROW( csr.validate(), fc::assert_exception );
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // bad reporter
+   csr.reporter = "nope.";
+   BOOST_CHECK_THROW( csr.validate(), fc::assert_exception );
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // requestor is not a sp
+   csr.requestor = "alice";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // reporter is not a sp
+   csr.reporter = "alice";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // no such request
+   csr.requestor = "sharon";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // no such request
+   csr.reporter = "sharon";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // works
+   trx.operations[0] = csr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+   BOOST_CHECK( by_platforms_idx.empty() );
+   }
+
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_SUITE_END()
