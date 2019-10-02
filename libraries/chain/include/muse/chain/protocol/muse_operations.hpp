@@ -293,7 +293,8 @@ struct request_stream_reporting_operation : public base_operation
 {
    string requestor; // platform that wants to delegate its reporting
    string reporter; // platform that should do the reporting
-   unsigned_int reward_pct; // scaled percentage of requestor's rewards to be paid to reporter
+   unsigned_int reward_pct = 0; // scaled percentage of requestor's rewards to be paid to reporter
+   unsigned_int redelegate_pct = 0; // scaled percentage of requestor's received delegated shares to be re-delegated to reporter
    future_extensions ext;
 
    void validate() const;
@@ -421,7 +422,7 @@ FC_REFLECT( muse::chain::streaming_platform_report_operation,
             (streaming_platform)(consumer)(content)(playlist_creator)(play_time)(dummy1)(dummy2)(ext) )
 FC_REFLECT( muse::chain::account_streaming_platform_vote_operation, (account)(streaming_platform)(approve))
 FC_REFLECT( muse::chain::streaming_platform_update_operation, (owner)(url)(fee))
-FC_REFLECT( muse::chain::request_stream_reporting_operation, (requestor)(reporter)(reward_pct)(ext) )
+FC_REFLECT( muse::chain::request_stream_reporting_operation, (requestor)(reporter)(reward_pct)(redelegate_pct)(ext) )
 FC_REFLECT( muse::chain::cancel_stream_reporting_operation, (requestor)(reporter)(ext) )
 FC_REFLECT( muse::chain::vote_operation, (voter)(url)(weight) )
 FC_REFLECT( muse::chain::balance_claim_operation,

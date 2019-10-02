@@ -153,7 +153,10 @@ void request_stream_reporting_operation::validate() const {
    FC_ASSERT( is_valid_account_name(requestor), "Requestor account name invalid" );
    FC_ASSERT( is_valid_account_name(reporter), "Reporter account name invalid" );
    FC_ASSERT( reporter != requestor, "Cannot request self-reporting" );
-   FC_ASSERT( reward_pct >= 0 && reward_pct.value <= MUSE_100_PERCENT, "Invalid scaled percentage value!" );
+   FC_ASSERT( reward_pct >= 0 && reward_pct.value <= MUSE_100_PERCENT,
+              "Invalid reward scaled percentage value!" );
+   FC_ASSERT( redelegate_pct >= 0 && redelegate_pct.value <= MUSE_100_PERCENT,
+              "Invalid redelegation scaled percentage value!" );
 }
 
 void cancel_stream_reporting_operation::validate() const {

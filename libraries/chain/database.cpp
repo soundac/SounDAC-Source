@@ -568,7 +568,8 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
 asset database::get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const
 {
    if( vested_symbol == VESTS_SYMBOL )
-      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares;
+      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares
+             - account.redelegated_vesting_shares + account.rereceived_vesting_shares;
    FC_ASSERT( false, "Invalid symbol" );
 }
 

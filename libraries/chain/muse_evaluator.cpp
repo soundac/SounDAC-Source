@@ -53,11 +53,32 @@ void request_stream_reporting_evaluator::do_apply( const request_stream_reportin
    FC_ASSERT( reporter_sp != by_streaming_platform_name_idx.end(), "No such streaming platform '${p}'",
               ("p",o.reporter) );
 
+   const auto& requestor_ac = db().get_account( o.requestor );
+   const auto& reporter_ac = db().get_account( o.reporter );
+   const uint64_t redelegated = ( fc::uint128_t( requestor_ac.received_vesting_shares.amount.value )
+                                  * o.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+   FC_ASSERT( static_cast<int64_t>( redelegated ) <= requestor_ac.received_vesting_shares.amount.value );
+   share_type redelegation_delta = redelegated;
+   uint32_t total_pct = 0;
+   uint16_t prev_pct = 0;
+   for( const auto& r : requestor_ac.redelegations )
+   {
+      if( r.first == reporter_ac.id )
+      {
+         prev_pct = r.second.redelegate_pct;
+         total_pct += o.redelegate_pct.value;
+         redelegation_delta = redelegated - r.second.redelegated;
+      }
+      else
+         total_pct += r.second.redelegate_pct;
+      FC_ASSERT( total_pct <= MUSE_100_PERCENT, "Cannot redelegate more than 100% in total" );
+   }
+
    const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
    const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
    if( srr != by_platforms_idx.end() )
    {
-      FC_ASSERT( srr->reward_pct != o.reward_pct, "Entry already exists!" );
+      FC_ASSERT( srr->reward_pct != o.reward_pct || o.redelegate_pct != prev_pct, "Entry already exists!" );
       db().modify( *srr, [&o]( stream_report_request_object& s ) {
            s.reward_pct = o.reward_pct;
       });
@@ -68,6 +89,29 @@ void request_stream_reporting_evaluator::do_apply( const request_stream_reportin
            s.reporter   = o.reporter;
            s.reward_pct = o.reward_pct;
       });
+
+   const auto old_redelegation = requestor_ac.redelegations.find( reporter_ac.id );
+   if( redelegation_delta != 0 || o.redelegate_pct.value > 0
+       || (old_redelegation != requestor_ac.redelegations.end()
+           && old_redelegation->second.redelegate_pct != o.redelegate_pct.value) )
+   {
+      db().modify( requestor_ac, [redelegation_delta,&reporter_ac,&o] ( account_object& acct ) {
+         acct.redelegations[reporter_ac.id].redelegate_pct = o.redelegate_pct;
+         acct.redelegations[reporter_ac.id].redelegated += redelegation_delta;
+         if( acct.redelegations[reporter_ac.id].redelegate_pct == 0 )
+         {
+            FC_ASSERT( acct.redelegations[reporter_ac.id].redelegated == 0 );
+            acct.redelegations.erase( reporter_ac.id );
+         }
+         acct.redelegated_vesting_shares.amount += redelegation_delta;
+      });
+      if( redelegation_delta != 0 )
+      {
+         db().modify( reporter_ac, [redelegation_delta] ( account_object& acct ) {
+            acct.rereceived_vesting_shares.amount += redelegation_delta;
+         });
+      }
+   }
 }
 
 void cancel_stream_reporting_evaluator::do_apply( const cancel_stream_reporting_operation& o )
@@ -78,6 +122,23 @@ void cancel_stream_reporting_evaluator::do_apply( const cancel_stream_reporting_
    const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
    FC_ASSERT( srr != by_platforms_idx.end(), "Can't cancel non-existant request!" );
    db().remove( *srr );
+
+   const auto& requestor_ac = db().get_account( o.requestor );
+   const auto& reporter_ac = db().get_account( o.reporter );
+   const auto old_redelegation = requestor_ac.redelegations.find( reporter_ac.id );
+   if( old_redelegation != requestor_ac.redelegations.end() )
+   {
+      if( old_redelegation->second.redelegated != 0 )
+      {
+         db().modify( reporter_ac, [&old_redelegation] ( account_object& acct ) {
+            acct.rereceived_vesting_shares.amount -= old_redelegation->second.redelegated;
+         });
+      }
+      db().modify( requestor_ac, [&old_redelegation,&reporter_ac] ( account_object& acct ) {
+         acct.redelegated_vesting_shares.amount -= old_redelegation->second.redelegated;
+         acct.redelegations.erase( reporter_ac.id );
+      });
+   }
 }
 
 void streaming_platform_report_evaluator::do_apply ( const streaming_platform_report_operation& o )

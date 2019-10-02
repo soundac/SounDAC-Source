@@ -817,6 +817,7 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
    auto min_delegation = asset( wso.median_props.account_creation_fee.amount * 10, MUSE_SYMBOL ) * gpo.get_vesting_share_price();
    auto min_update = wso.median_props.account_creation_fee * gpo.get_vesting_share_price();
 
+   int64_t old_delegation = 0;
    // If delegation doesn't exist, create it
    if( delegation == delegation_idx.end() )
    {
@@ -844,10 +845,13 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
    // Else if the delegation is increasing
    else if( op.vesting_shares >= delegation->vesting_shares )
    {
+      old_delegation = delegation->vesting_shares.amount.value;
       auto delta = op.vesting_shares - delegation->vesting_shares;
 
-      FC_ASSERT( delta >= min_update, "Steem Power increase is not enough of a difference. min_update: ${min}", ("min", min_update) );
-      FC_ASSERT( available_shares >= op.vesting_shares - delegation->vesting_shares, "Account does not have enough vesting shares to delegate." );
+      FC_ASSERT( delta >= min_update,
+                 "Vests increase is not enough of a difference. min_update: ${min}", ("min", min_update) );
+      FC_ASSERT( available_shares >= op.vesting_shares - delegation->vesting_shares,
+                 "Account does not have enough vesting shares to delegate." );
 
       _db.modify( delegator, [delta]( account_object& a )
       {
@@ -867,16 +871,20 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
    // Else the delegation is decreasing
    else /* delegation->vesting_shares > op.vesting_shares */
    {
+      old_delegation = delegation->vesting_shares.amount.value;
       auto delta = delegation->vesting_shares - op.vesting_shares;
 
       if( op.vesting_shares.amount > 0 )
       {
-         FC_ASSERT( delta >= min_update, "Steem Power decrease is not enough of a difference. min_update: ${min}", ("min", min_update) );
-         FC_ASSERT( op.vesting_shares >= min_delegation, "Delegation must be removed or leave minimum delegation amount of ${v}", ("v", min_delegation) );
+         FC_ASSERT( delta >= min_update, "Vests decrease is not enough of a difference. min_update: ${min}",
+                    ("min", min_update) );
+         FC_ASSERT( op.vesting_shares >= min_delegation,
+                    "Delegation must be removed or leave minimum delegation amount of ${v}", ("v", min_delegation) );
       }
       else
       {
-         FC_ASSERT( delegation->vesting_shares.amount > 0, "Delegation would set vesting_shares to zero, but it is already zero");
+         FC_ASSERT( delegation->vesting_shares.amount > 0,
+                    "Delegation would set vesting_shares to zero, but it is already zero" );
       }
 
       _db.create< vesting_delegation_expiration_object >( [&_db,&op,&gpo,&delegation,delta]( vesting_delegation_expiration_object& obj )
@@ -902,6 +910,34 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          _db.remove( *delegation );
       }
+   }
+
+   if( old_delegation != op.vesting_shares.amount && !delegatee.redelegations.empty() )
+   {
+       map<account_id_type,int64_t> deltas;
+       _db.modify( delegatee, [old_delegation,&deltas,&op] ( account_object& acct ) {
+          for( auto& r : acct.redelegations )
+          {
+             const uint64_t old = ( fc::uint128_t( old_delegation )
+                                    * r.second.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+             const uint64_t now = ( fc::uint128_t( op.vesting_shares.amount.value )
+                                    * r.second.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+             const int64_t delta = static_cast<int64_t>( now ) - old;
+             if( delta != 0 )
+             {
+                r.second.redelegated += delta;
+                acct.redelegated_vesting_shares.amount += delta;
+                deltas[r.first] = delta;
+             }
+          }
+       });
+       for( const auto& d : deltas )
+       {
+          const auto& acct = _db.get<account_object>( d.first );
+          _db.modify( acct, [&d] ( account_object& acct ) {
+              acct.rereceived_vesting_shares.amount += d.second;
+          });
+       }
    }
 }
 
