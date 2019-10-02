@@ -2022,7 +2022,6 @@ BOOST_AUTO_TEST_CASE( disable_test )
       FAIL( "report after disable", spro );
    }
 
-
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( request_reporting_test )
@@ -2177,6 +2176,137 @@ BOOST_AUTO_TEST_CASE( request_reporting_test )
    BOOST_CHECK( by_platforms_idx.empty() );
    }
 
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( delegated_reporting_test )
+{ try {
+   ACTORS( (alice)(paula)(martha)(sarah)(suzie)(uhura) );
+
+   const auto& platform_idx = db.get_index_type< streaming_platform_index >().indices().get<by_name>();
+   const auto& report_idx = db.get_index_type< report_index >().indices();
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+   const auto sarah_sp = platform_idx.find( "sarah" );
+   BOOST_REQUIRE( sarah_sp != platform_idx.end() );
+   const auto suzie_sp = platform_idx.find( "suzie" );
+   BOOST_REQUIRE( suzie_sp != platform_idx.end() );
+
+   // --------- Create content ------------
+   {
+      content_operation cop;
+      cop.uploader = "uhura";
+      cop.url = "ipfs://abcdef1";
+      cop.album_meta.album_title = "First test song";
+      cop.track_meta.track_title = "First test song";
+      cop.comp_meta.third_party_publishers = false;
+      distribution dist;
+      dist.payee = "paula";
+      dist.bp = MUSE_100_PERCENT;
+      cop.distributions.push_back( dist );
+      management_vote mgmt;
+      mgmt.voter = "martha";
+      mgmt.percentage = 100;
+      cop.management.push_back( mgmt );
+      cop.management_threshold = 100;
+      cop.playing_reward = 10;
+      cop.publishers_share = 0;
+      trx.operations.push_back( cop );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // --------- Sarah reports ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 1, report_idx.size() );
+      const auto report = report_idx.begin();
+      BOOST_CHECK( !report->spinning_platform.valid() );
+      BOOST_CHECK( !report->reward_pct.valid() );
+   }
+
+   // --------- Suzy fails to report for Sarah ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzie";
+      spro.ext.value.spinning_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+      trx.operations.clear();
+   }
+
+   // sarah requests reporting from suzie
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.reward_pct = 50 * MUSE_1_PERCENT;
+      rsr.validate();
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // --------- Suzy reports successfully for Sarah ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzie";
+      spro.ext.value.spinning_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 2, report_idx.size() );
+      auto report = report_idx.begin();
+      report++;
+      BOOST_REQUIRE( report->spinning_platform.valid() );
+      BOOST_REQUIRE( report->reward_pct.valid() );
+      BOOST_CHECK_EQUAL( sarah_sp->id, *report->spinning_platform );
+      BOOST_CHECK_EQUAL( 50 * MUSE_1_PERCENT, *report->reward_pct );
+   }
+
+   // --------- Sarah reports again ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 200;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 3, report_idx.size() );
+   }
+   
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()
