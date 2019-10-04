@@ -1655,7 +1655,24 @@ asset database::process_content_cashout( const asset& content_reward )
       else
          pay_reserve = pay_reserve * std::min( consumer.total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
       pay_reserve = pay_reserve / consumer.total_listening_time;
-      paid += pay_to_content(itr->content, pay_reserve, itr->streaming_platform );
+      const content_object& content = get<content_object>( itr->content );
+      auto content_payment = pay_to_content( content, pay_reserve, itr->streaming_platform );
+      paid += content_payment;
+      if( has_hardfork( MUSE_HARDFORK_0_5 ) )
+      {
+         auto platform_reward = pay_reserve - content_payment;
+         auto report_reward = platform_reward;
+         if( itr->spinning_platform.valid() && itr->reward_pct.valid() )
+         {
+            report_reward = asset( platform_reward.amount * *itr->reward_pct / MUSE_100_PERCENT,
+                                   platform_reward.asset_id );
+            if( platform_reward.amount > report_reward.amount )
+               pay_to_platform( *itr->spinning_platform, platform_reward - report_reward, content.url );
+         }
+         if( report_reward.amount > 0 )
+            pay_to_platform( itr->streaming_platform, report_reward, content.url );
+         paid += platform_reward;
+      }
       auto listened = listening_times.find(consumer.id);
       if( listened == listening_times.end() )
          listening_times[consumer.id] = itr->play_time;
@@ -1812,28 +1829,30 @@ void database::pay_to_platform( streaming_platform_id_type platform, const asset
    push_applied_operation(playing_reward_operation(pl.owner, url, mbd_created, vest_created ));
 }FC_LOG_AND_RETHROW() }
 
-asset database::pay_to_content(content_id_type content, asset payout, streaming_platform_id_type platform)
+asset database::pay_to_content(const content_object& content, asset payout, streaming_platform_id_type platform)
 {try{
    asset paid (0);
    if( !has_hardfork(MUSE_HARDFORK_0_2) )
       payout = payout - payout * MUSE_CURATE_APR_PERCENT_RESERVE / 100; // former curation reward
-   const content_object& co = get<content_object>( content );
    asset platform_reward = payout;
-   platform_reward.amount = platform_reward.amount * co.playing_reward / 10000;
+   platform_reward.amount = platform_reward.amount * content.playing_reward / MUSE_100_PERCENT;
 
    payout.amount -= platform_reward.amount;
    asset comp_reward = payout;
-   comp_reward.amount = comp_reward.amount * co.publishers_share / 10000;
+   comp_reward.amount = comp_reward.amount * content.publishers_share / MUSE_100_PERCENT;
    asset master_reward = payout - comp_reward;
 
-   pay_to_content_master(co, master_reward);
-   pay_to_content_comp(co, comp_reward);
-   pay_to_platform( platform, platform_reward, co.url );
+   pay_to_content_master(content, master_reward);
    paid += master_reward;
+   pay_to_content_comp(content, comp_reward);
    paid += comp_reward;
-   paid += platform_reward;
+   if( !has_hardfork(MUSE_HARDFORK_0_5) )
+   {
+      pay_to_platform( platform, platform_reward, content.url );
+      paid += platform_reward;
+   }
 
-   modify<content_object>( co, []( content_object& c ) {
+   modify<content_object>( content, []( content_object& c ) {
       --c.times_played_24;
    });
 
