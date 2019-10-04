@@ -2458,4 +2458,145 @@ BOOST_AUTO_TEST_CASE( delegated_report_payouts )
 
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( redelegated_vesting_shares )
+{ try {
+   ACTORS( (alice)(sarah)(suzie) )
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   fund( "alice", 1000000 );
+   vest( "alice", 1000000 );
+
+   BOOST_CHECK_EQUAL( 1000100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(     100000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(     100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice delegates 2M to sarah
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 2000000, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 998100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   2100000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah requests reporting from suzie and redelegates 33%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 101 * MUSE_1_PERCENT; // too much
+      BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+      trx.operations.push_back( rsr );
+      BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+      rsr.redelegate_pct = 33 * MUSE_1_PERCENT;
+      rsr.validate();
+      trx.operations[0] = rsr;
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 998100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1440000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    760000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice increases delegation to sarah to 3.5M
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 3500000, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   2445000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1255000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah increases redelegation to 47%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 47 * MUSE_1_PERCENT;
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1955000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1745000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice decreases delegation to sarah to 999997
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 999997, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // alice's un-delegation will become effective only after MUSE_DELEGATION_RETURN_PERIOD
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    629999, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    569998, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah decreases redelegation to 7%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 7 * MUSE_1_PERCENT;
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1029998, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    169999, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah cancels redelegation
+   {
+      cancel_stream_reporting_operation csr;
+      csr.requestor = "sarah";
+      csr.reporter = "suzie";
+      trx.operations.push_back( csr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1099997, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_SUITE_END()
