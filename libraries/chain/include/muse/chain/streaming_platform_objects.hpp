@@ -28,6 +28,26 @@ namespace muse { namespace chain {
           */
          share_type      votes;
 
+         /** The number of users who have at least one streaming report in the
+          *  last 24 hours
+          */
+         uint32_t active_users = 0;
+
+         /** The number of users who have at least 1 hour worth of streaming
+          *  reports in the last 24 hours
+          */
+         uint32_t full_time_users = 0;
+
+         /** Total listening time within the past 24 hours, in seconds.
+          */
+         uint32_t total_listening_time = 0;
+
+         /** Full user time within the past 24 hours, in seconds. Means sum of
+          *  the total listening time of all users, capped at 1 hour for each
+          *  user.
+          */
+         uint32_t full_users_time = 0;
+
          streaming_platform_id_type get_id()const { return id; }
    };
 
@@ -167,6 +187,7 @@ FC_REFLECT_DERIVED( muse::chain::streaming_platform_object, (graphene::db::objec
                     (owner)
                     (created)
                     (url)(votes)
+                    (active_users)(full_time_users)(total_listening_time)(full_users_time)
                   )
 FC_REFLECT_DERIVED( muse::chain::streaming_platform_vote_object, (graphene::db::object), (streaming_platform)(account) )
 

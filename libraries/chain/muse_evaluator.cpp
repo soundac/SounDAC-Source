@@ -187,8 +187,18 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
    });
 
    const auto prev_listening_time = consumer.total_listening_time;
-   db().modify< account_object >(consumer, [&o]( account_object &a){
-        a.total_listening_time += o.play_time;
+   uint32_t prev_platform_listening_time = 0;
+   db().modify< account_object >(consumer, [&o,&stp,spp,&prev_platform_listening_time]( account_object &a ) {
+      a.total_listening_time += o.play_time;
+      auto sp_id = spp == nullptr ? stp.id : spp->id;
+      auto entry = a.total_time_by_platform.find( sp_id );
+      if( entry == a.total_time_by_platform.end() )
+         a.total_time_by_platform[sp_id] = o.play_time;
+      else
+      {
+         prev_platform_listening_time = entry->second;
+         entry->second += o.play_time;
+      }
    });
 
    db().modify( db().get_dynamic_global_properties(), [prev_listening_time, &o] ( dynamic_global_property_object &dgpo ){
@@ -205,6 +215,22 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
          }
       }
       dgpo.total_listening_time += o.play_time;
+   });
+
+   db().modify( spp == nullptr ? stp : *spp, [prev_platform_listening_time, &o] ( streaming_platform_object &sp ){
+      if( prev_platform_listening_time < 3600 )
+      {
+         if( prev_platform_listening_time == 0 )
+            ++sp.active_users;
+         if( 3600 - prev_platform_listening_time > o.play_time )
+            sp.full_users_time += o.play_time;
+         else
+         {
+            sp.full_users_time += 3600 - prev_platform_listening_time;
+            ++sp.full_time_users;
+         }
+      }
+      sp.total_listening_time += o.play_time;
    });
 
    db().modify< content_object >(content, [] (content_object &c){

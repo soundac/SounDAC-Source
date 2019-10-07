@@ -49,6 +49,7 @@ namespace muse { namespace chain {
          uint64_t        score=0;
          
          uint32_t        total_listening_time = 0;
+         map<streaming_platform_id_type,uint32_t> total_time_by_platform;
          uint16_t        voting_power = MUSE_100_PERCENT;   ///< current voting power of this account, it falls after every vote
          time_point_sec  last_vote_time; ///< used to increase the voting power of this account the longer it goes without voting.
 
@@ -475,7 +476,7 @@ namespace muse { namespace chain {
 }}
 FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (name)(owner)(active)(basic)(memo_key)(json_metadata)(proxy)(last_owner_update)
-                    (created)(total_listening_time)
+                    (created)(total_listening_time)(total_time_by_platform)
                     (owner_challenged)(active_challenged)(last_owner_proved)(last_active_proved)(recovery_account)(last_account_recovery)
                     (lifetime_vote_count)(voting_power)(last_vote_time)
                     (balance)
