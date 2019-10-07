@@ -806,7 +806,9 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
 
    const auto& delegator = _db.get_account( op.delegator );
    const auto& delegatee = _db.get_account( op.delegatee );
-   const auto& delegation_idx = db().get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
+   const streaming_platform_object* delegator_sp = _db.find_streaming_platform( op.delegator );
+   const streaming_platform_object* delegatee_sp = _db.find_streaming_platform( op.delegatee );
+   const auto& delegation_idx = _db.get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
    auto delegation = delegation_idx.find( boost::make_tuple( op.delegator, op.delegatee ) );
 
    auto available_shares = delegator.vesting_shares - delegator.delegated_vesting_shares - asset( delegator.to_withdraw - delegator.withdrawn, VESTS_SYMBOL );
@@ -818,6 +820,7 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
    auto min_update = wso.median_props.account_creation_fee * gpo.get_vesting_share_price();
 
    int64_t old_delegation = 0;
+   share_type sp_delta = 0;
    // If delegation doesn't exist, create it
    if( delegation == delegation_idx.end() )
    {
@@ -841,6 +844,10 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          a.received_vesting_shares += op.vesting_shares;
       });
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = op.vesting_shares.amount;
+      else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         sp_delta = -op.vesting_shares.amount;
    }
    // Else if the delegation is increasing
    else if( op.vesting_shares >= delegation->vesting_shares )
@@ -867,6 +874,10 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          obj.vesting_shares = op.vesting_shares;
       });
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = delta.amount;
+      else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         sp_delta = -delta.amount;
    }
    // Else the delegation is decreasing
    else /* delegation->vesting_shares > op.vesting_shares */
@@ -910,7 +921,16 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          _db.remove( *delegation );
       }
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = -delta.amount;
+      // else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         // delegator receives delegation back with a delay
    }
+
+   if( sp_delta != 0 )
+      _db.modify( gpo, [sp_delta] ( dynamic_global_property_object& dgpo ) {
+         dgpo.total_vested_by_platforms += sp_delta;
+      });
 
    if( old_delegation != op.vesting_shares.amount && !delegatee.redelegations.empty() )
    {

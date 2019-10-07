@@ -1065,10 +1065,13 @@ asset database::create_vesting( const account_object& to_account, asset muse )
          to.vesting_shares += new_vesting;
       } );
 
-      modify( cprops, [&]( dynamic_global_property_object& props )
+      const streaming_platform_object* sp = find_streaming_platform( to_account.name );
+      modify( cprops, [muse,new_vesting,sp]( dynamic_global_property_object& props )
       {
          props.total_vesting_fund_muse += muse;
          props.total_vesting_shares += new_vesting;
+         if( sp )
+             props.total_vested_by_platforms += new_vesting.amount;
       } );
 
       adjust_proxied_witness_votes( to_account, new_vesting.amount );
@@ -3102,11 +3105,17 @@ void database::clear_expired_orders()
 
 void database::clear_expired_delegations()
 {
-   auto now = head_block_time();
+   const auto dgpo = get_dynamic_global_properties();
+   auto now = dgpo.time;
    const auto& delegations_by_exp = get_index_type< vesting_delegation_expiration_index >().indices().get< by_expiration >();
    auto itr = delegations_by_exp.begin();
    while( itr != delegations_by_exp.end() && itr->expiration < now )
    {
+      if( find_streaming_platform( itr->delegator ) )
+         modify( dgpo, [&itr]( dynamic_global_property_object& dgpo ) {
+            dgpo.total_vested_by_platforms += itr->vesting_shares.amount;
+         });
+
       modify( get_account( itr->delegator ), [&]( account_object& a )
       {
          a.delegated_vesting_shares -= itr->vesting_shares;
@@ -3419,6 +3428,7 @@ void database::validate_invariants()const
       for( auto itr = witness_idx.begin(); itr != witness_idx.end(); ++itr )
          FC_ASSERT( itr->votes < gpo.total_vesting_shares.amount, "", ("itr",*itr) );
 
+      share_type total_vested_by_sp = 0;
       for( auto itr = account_idx.begin(); itr != account_idx.end(); ++itr )
       {
          total_supply += itr->balance;
@@ -3429,6 +3439,9 @@ void database::validate_invariants()const
                                  ( MUSE_MAX_PROXY_RECURSION_DEPTH > 0 ?
                                       itr->proxied_vsf_votes[MUSE_MAX_PROXY_RECURSION_DEPTH - 1] :
                                       itr->vesting_shares.amount ) );
+         if( find_streaming_platform( itr->name ) != nullptr )
+            total_vested_by_sp += itr->vesting_shares.amount - itr->delegated_vesting_shares.amount
+                                  + itr->received_vesting_shares.amount;
       }
 
       const auto& convert_request_idx = get_index_type< convert_index >().indices();
@@ -3474,6 +3487,9 @@ void database::validate_invariants()const
       FC_ASSERT( gpo.current_mbd_supply == total_mbd, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)("total_mbd",total_mbd) );
       FC_ASSERT( gpo.total_vesting_shares == total_vesting, "", ("gpo.total_vesting_shares",gpo.total_vesting_shares)("total_vesting",total_vesting) );
       FC_ASSERT( gpo.total_vesting_shares.amount == total_vsf_votes, "", ("total_vesting_shares",gpo.total_vesting_shares)("total_vsf_votes",total_vsf_votes) );
+      FC_ASSERT( gpo.total_vested_by_platforms == total_vested_by_sp, "",
+                 ("total_vested_by_platforms",gpo.total_vested_by_platforms)
+                 ("total_vested_by_sp",total_vested_by_sp) );
 
       FC_ASSERT( gpo.virtual_supply >= gpo.current_supply );
       if ( !get_feed_history().current_median_history.is_null() )

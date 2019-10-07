@@ -130,6 +130,11 @@ namespace muse { namespace chain {
           *  user.
           */
          uint32_t full_users_time = 0;
+
+         /** The totoal amount of vesting shares (including delegation but not re-delegation) held by all
+          *  streaming platforms.
+          */
+         share_type total_vested_by_platforms = 0;
    };
 }}
 
@@ -161,5 +166,6 @@ FC_REFLECT_DERIVED( muse::chain::dynamic_global_property_object, (graphene::db::
                     (full_time_users)
                     (total_listening_time)
                     (full_users_time)
+                    (total_vested_by_platforms)
                   )
 

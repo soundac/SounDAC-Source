@@ -37,7 +37,14 @@ void streaming_platform_update_evaluator::do_apply( const streaming_platform_upd
            w.created            = db().head_block_time();
       });
       db().pay_fee( sp_account, o.fee );
-
+      share_type vested = sp_account.vesting_shares.amount
+                          + sp_account.received_vesting_shares.amount
+                          - sp_account.delegated_vesting_shares.amount;
+      if( vested != 0 )
+         db().modify( db().get_dynamic_global_properties(),
+                      [vested] ( dynamic_global_property_object& dgpo ) {
+            dgpo.total_vested_by_platforms += vested;
+         });
    }
 }
 
