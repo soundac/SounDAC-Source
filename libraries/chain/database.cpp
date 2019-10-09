@@ -1643,14 +1643,135 @@ struct sp_helper
    share_type vesting_stake;
 };
 
+static asset calculate_report_reward( const database& db, const dynamic_global_property_object& dgpo,
+                                      const asset& total_payout, const uint32_t play_time,
+                                      const sp_helper& platform, const account_object& consumer )
+{
+   if( platform.vesting_stake.value == 0 || total_payout.amount.value == 0 )
+      return asset( 0, total_payout.asset_id );
+   FC_ASSERT( total_payout.amount.value > 0 );
+
+   uint32_t total_listening_time;
+   if( !db.has_hardfork( MUSE_HARDFORK_0_5 ) )
+      total_listening_time = consumer.total_listening_time;
+   else
+   {
+      auto time_entry = consumer.total_time_by_platform.find( platform.sp->id );
+      FC_ASSERT( time_entry != consumer.total_time_by_platform.end() );
+      total_listening_time = time_entry->second;
+   }
+
+   dlog("process content cashout ", ("consumer.total_listening_time", total_listening_time));
+
+   fc::uint128_t pay_reserve = total_payout.amount.value;
+   pay_reserve *= play_time;
+   if( !db.has_hardfork( MUSE_HARDFORK_0_2 ) )
+      pay_reserve = pay_reserve / dgpo.active_users;
+   else if( !db.has_hardfork( MUSE_HARDFORK_0_5 ) )
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
+   else
+   {
+      pay_reserve = pay_reserve * platform.vesting_stake.value / dgpo.total_vested_by_platforms.value;
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) )
+                                / platform.sp->full_users_time;
+   }
+   pay_reserve = pay_reserve / total_listening_time;
+
+   return asset( pay_reserve.to_uint64(), total_payout.asset_id );
+}
+
 static void adjust_listening_times( flat_map<account_id_type, uint32_t>& listening_times,
-                                    account_id_type consumer, uint16_t play_time )
+                                    account_id_type consumer, uint32_t play_time )
 {
    auto listened = listening_times.find( consumer );
    if( listened == listening_times.end() )
       listening_times[consumer] = play_time;
    else
       listened->second += play_time;
+};
+
+static void adjust_delta( const uint32_t time_before, const uint32_t time_after,
+                          uint32_t& active_users, uint32_t& full_time_users,
+                          uint32_t& total_listening_time, uint32_t& full_users_time )
+{
+   total_listening_time += time_before - time_after;
+   if( time_after < 3600 )
+   {
+      if( time_after == 0 )
+         ++active_users;
+      if( time_before >= 3600 )
+      {
+         ++full_time_users;
+         full_users_time += 3600 - time_after;
+      }
+      else
+         full_users_time += time_before - time_after;
+   }
+}
+
+static void adjust_statistics( database& db, const dynamic_global_property_object& dgpo,
+                               const flat_map<streaming_platform_id_type, sp_helper> platforms )
+{
+   const bool adjust_consumer_total = db.has_hardfork( MUSE_HARDFORK_0_2 );
+
+   uint32_t global_active_users_delta = 0;
+   uint32_t global_full_time_users_delta = 0;
+   uint32_t global_total_listening_time_delta = 0;
+   uint32_t global_full_users_time_delta = 0;
+   for( const auto& sph : platforms )
+   {
+      uint32_t platform_active_users_delta = 0;
+      uint32_t platform_full_time_users_delta = 0;
+      uint32_t platform_total_listening_time_delta = 0;
+      uint32_t platform_full_users_time_delta = 0;
+      for ( const auto& listened : sph.second.listening_times )
+      {
+         const account_object& consumer = db.get<account_object>( listened.first );
+         auto global_time_before = consumer.total_listening_time;
+         if( !adjust_consumer_total ) global_time_before += listened.second;
+         auto ptb = consumer.total_time_by_platform.find( sph.first );
+         FC_ASSERT( ptb != consumer.total_time_by_platform.end() );
+         const uint32_t platform_time_before = ptb->second;
+         db.modify( consumer, [&listened,adjust_consumer_total,&sph] ( account_object& a ) {
+            if( adjust_consumer_total )
+               a.total_listening_time -= listened.second;
+            auto entry = a.total_time_by_platform.find( sph.first );
+            FC_ASSERT( entry != a.total_time_by_platform.end() );
+            entry->second -= listened.second;
+            if( entry->second == 0 )
+               a.total_time_by_platform.erase( sph.first );
+         });
+
+         adjust_delta( global_time_before, consumer.total_listening_time,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         ptb = consumer.total_time_by_platform.find( sph.first );
+         adjust_delta( platform_time_before, ptb == consumer.total_time_by_platform.end() ? 0 : ptb->second,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
+      if( platform_total_listening_time_delta > 0 || platform_full_users_time_delta > 0
+            || platform_full_time_users_delta > 0 || platform_active_users_delta > 0 )
+         db.modify( *sph.second.sp, [platform_total_listening_time_delta,platform_full_users_time_delta,
+                                     platform_full_time_users_delta,platform_active_users_delta]
+                                    ( streaming_platform_object& o ) {
+            o.active_users -= platform_active_users_delta;
+            o.full_time_users -= platform_full_time_users_delta;
+            o.total_listening_time -= platform_total_listening_time_delta;
+            o.full_users_time -= platform_full_users_time_delta;
+         });
+   } // for platforms
+
+   if( global_total_listening_time_delta > 0 || global_full_users_time_delta > 0
+         || global_full_time_users_delta > 0 || global_active_users_delta > 0 )
+      db.modify( dgpo, [global_total_listening_time_delta,global_full_users_time_delta,
+                        global_full_time_users_delta,global_active_users_delta]
+                       ( dynamic_global_property_object& o ) {
+         o.active_users -= global_active_users_delta;
+         o.full_time_users -= global_full_time_users_delta;
+         o.total_listening_time -= global_total_listening_time_delta;
+         o.full_users_time -= global_full_users_time_delta;
+      });
 }
 
 asset database::process_content_cashout( const asset& content_reward )
@@ -1677,50 +1798,35 @@ asset database::process_content_cashout( const asset& content_reward )
          const auto& sp_acct = get_account( tmp.sp->owner );
          tmp.vesting_stake = sp_acct.vesting_shares.amount + sp_acct.received_vesting_shares.amount
                              - sp_acct.delegated_vesting_shares.amount;
-         platforms[spinner_id] = tmp;
+         platforms[spinner_id] = std::move( tmp );
          sp = platforms.find( spinner_id );
       }
 
       const account_object & consumer = get<account_object>( itr->consumer );
-      auto time_entry = consumer.total_time_by_platform.find( spinner_id );
-      FC_ASSERT( time_entry != consumer.total_time_by_platform.end() );
-      uint32_t total_listening_time = has_hardfork( MUSE_HARDFORK_0_5 ) ? time_entry->second
-                                                                        : consumer.total_listening_time;
-      dlog("process content cashout ", ("consumer.total_listening_time", total_listening_time));
-      FC_ASSERT( total_payout.amount.value > 0 );
-      fc::uint128_t pay_reserve = total_payout.amount.value;
-      pay_reserve *= itr->play_time;
-      if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
-         pay_reserve = pay_reserve / dgpo.active_users;
-      else if( !has_hardfork( MUSE_HARDFORK_0_5 ) )
-         pay_reserve = pay_reserve * std::min( consumer.total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
-      else
-      {
-         pay_reserve = pay_reserve * sp->second.vesting_stake.value / dgpo.total_vested_by_platforms.value;
-         pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) )
-                                   / sp->second.sp->full_users_time;
-      }
-      pay_reserve = pay_reserve / total_listening_time;
+      auto report_reward = calculate_report_reward( *this, dgpo, total_payout, itr->play_time, sp->second, consumer );
       const content_object& content = get<content_object>( itr->content );
-      auto content_payment = pay_to_content( content, asset( pay_reserve.to_uint64(), content_reward.asset_id ),
-                                             itr->streaming_platform );
+      auto content_payment = pay_to_content( content, report_reward, itr->streaming_platform );
       paid += content_payment;
       if( has_hardfork( MUSE_HARDFORK_0_5 ) )
       {
-         auto platform_reward = asset( pay_reserve.to_uint64(), content_reward.asset_id ) - content_payment;
-         auto report_reward = platform_reward;
+         auto platform_reward = report_reward - content_payment;
+         asset reporter_reward;
          if( itr->spinning_platform.valid() && itr->reward_pct.valid() )
          {
-            report_reward = asset( platform_reward.amount * *itr->reward_pct / MUSE_100_PERCENT,
+            reporter_reward = asset( platform_reward.amount * *itr->reward_pct / MUSE_100_PERCENT,
                                    platform_reward.asset_id );
-            if( platform_reward.amount > report_reward.amount )
-               pay_to_platform( *itr->spinning_platform, platform_reward - report_reward, content.url );
+            if( platform_reward.amount > reporter_reward.amount )
+               pay_to_platform( *itr->spinning_platform, platform_reward - reporter_reward, content.url );
          }
-         if( report_reward.amount > 0 )
-            pay_to_platform( itr->streaming_platform, report_reward, content.url );
+         else
+            reporter_reward = platform_reward;
+
+         if( reporter_reward.amount > 0 )
+            pay_to_platform( itr->streaming_platform, reporter_reward, content.url );
+
          paid += platform_reward;
       }
-      else // before hf_0_5
+      else // before hf_0_5 platform_reward is paid out in pay_to_content()
          if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
             modify<account_object>(consumer, [&itr](account_object & a){
                a.total_listening_time -= itr->play_time;
@@ -1730,84 +1836,8 @@ asset database::process_content_cashout( const asset& content_reward )
       itr = ridx.begin();
    }
 
-   uint32_t active_users_delta = 0;
-   uint32_t full_time_users_delta = 0;
-   uint32_t total_listening_time_delta = 0;
-   uint32_t full_users_time_delta = 0;
-   auto accumulate_listening_times = [&active_users_delta,&full_time_users_delta,&total_listening_time_delta,
-                                      &full_users_time_delta,this]
-                                     ( const flat_map<account_id_type, uint32_t>& listening_times,
-                                       const streaming_platform_id_type sp, const bool adjust_consumer_total ) {
-      active_users_delta = 0;
-      full_time_users_delta = 0;
-      total_listening_time_delta = 0;
-      full_users_time_delta = 0;
-      for ( const auto& listened : listening_times )
-      {
-         const account_object& consumer = get<account_object>( listened.first );
-         const auto time_before = consumer.total_listening_time;
-         modify<account_object>(consumer, [&listened,adjust_consumer_total,sp](account_object & a){
-            if( adjust_consumer_total )
-               a.total_listening_time -= listened.second;
-            auto entry = a.total_time_by_platform.find( sp );
-            FC_ASSERT( entry != a.total_time_by_platform.end() );
-            entry->second -= listened.second;
-            if( entry->second == 0 )
-               a.total_time_by_platform.erase( sp );
-         });
+   adjust_statistics( *this, dgpo, platforms );
 
-         if( consumer.total_listening_time < 3600 )
-         {
-            if( consumer.total_listening_time == 0 )
-               ++active_users_delta;
-            if( time_before >= 3600 )
-            {
-               ++full_time_users_delta;
-               full_users_time_delta += 3600 - consumer.total_listening_time;
-            }
-            else
-               full_users_time_delta += listened.second;
-         }
-         total_listening_time_delta += listened.second;
-      }
-   };
-   {
-      uint32_t aud = 0;
-      uint32_t ftud = 0;
-      uint32_t tltd = 0;
-      uint32_t futd = 0;
-      for( const auto sph : platforms )
-      {
-         accumulate_listening_times( sph.second.listening_times, sph.first, has_hardfork( MUSE_HARDFORK_0_2 ) );
-         aud += active_users_delta;
-         ftud += full_time_users_delta;
-         tltd += total_listening_time_delta;
-         futd += full_users_time_delta;
-         if( total_listening_time_delta > 0 || full_users_time_delta > 0
-               || full_time_users_delta > 0 || active_users_delta > 0 )
-            modify( *sph.second.sp, [total_listening_time_delta,full_users_time_delta,full_time_users_delta,
-                                     active_users_delta]
-                                    ( streaming_platform_object& o ) {
-               o.active_users -= active_users_delta;
-               o.full_time_users -= full_time_users_delta;
-               o.total_listening_time -= total_listening_time_delta;
-               o.full_users_time -= full_users_time_delta;
-            });
-      }
-      active_users_delta = aud;
-      full_time_users_delta = ftud;
-      total_listening_time_delta = tltd;
-      full_users_time_delta = futd;
-   }
-   if( total_listening_time_delta > 0 || full_users_time_delta > 0
-         || full_time_users_delta > 0 || active_users_delta > 0 )
-      modify( dgpo, [total_listening_time_delta,full_users_time_delta,full_time_users_delta,active_users_delta]
-                    ( dynamic_global_property_object& o ) {
-         o.active_users -= active_users_delta;
-         o.full_time_users -= full_time_users_delta;
-         o.total_listening_time -= total_listening_time_delta;
-         o.full_users_time -= full_users_time_delta;
-      });
    return paid;
 } FC_LOG_AND_RETHROW() }
 
