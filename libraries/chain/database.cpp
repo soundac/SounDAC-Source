@@ -1639,15 +1639,22 @@ void database::process_vesting_withdrawals()
 struct sp_helper
 {
    const streaming_platform_object* sp;
+   const account_object* sp_acct;
    flat_map<account_id_type, uint32_t> listening_times;
-   share_type vesting_stake;
+
+   share_type get_vesting_stake()const
+   {
+      return sp_acct->vesting_shares.amount
+             + sp_acct->received_vesting_shares.amount - sp_acct->delegated_vesting_shares.amount;
+   }
 };
 
 static asset calculate_report_reward( const database& db, const dynamic_global_property_object& dgpo,
                                       const asset& total_payout, const uint32_t play_time,
                                       const sp_helper& platform, const account_object& consumer )
 {
-   if( platform.vesting_stake.value == 0 || total_payout.amount.value == 0 )
+   share_type stake = platform.get_vesting_stake();
+   if( stake.value == 0 || total_payout.amount.value == 0 )
       return asset( 0, total_payout.asset_id );
    FC_ASSERT( total_payout.amount.value > 0 );
 
@@ -1671,7 +1678,7 @@ static asset calculate_report_reward( const database& db, const dynamic_global_p
       pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
    else
    {
-      pay_reserve = pay_reserve * platform.vesting_stake.value / dgpo.total_vested_by_platforms.value;
+      pay_reserve = pay_reserve * stake.value / dgpo.total_vested_by_platforms.value;
       pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) )
                                 / platform.sp->full_users_time;
    }
@@ -1795,9 +1802,7 @@ asset database::process_content_cashout( const asset& content_reward )
       {
          sp_helper tmp;
          tmp.sp = &get<streaming_platform_object>( spinner_id );
-         const auto& sp_acct = get_account( tmp.sp->owner );
-         tmp.vesting_stake = sp_acct.vesting_shares.amount + sp_acct.received_vesting_shares.amount
-                             - sp_acct.delegated_vesting_shares.amount;
+         tmp.sp_acct = &get_account( tmp.sp->owner );
          platforms[spinner_id] = std::move( tmp );
          sp = platforms.find( spinner_id );
       }
