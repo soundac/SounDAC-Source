@@ -2276,6 +2276,7 @@ void database::initialize_indexes()
    add_index< primary_index< report_index > >();
    add_index< primary_index< witness_index > >();
    add_index< primary_index< streaming_platform_vote_index > >();
+   add_index< primary_index< streaming_platform_user_index > >();
    add_index< primary_index< witness_vote_index > >();
    add_index< primary_index< convert_index > >();
    add_index< primary_index< liquidity_reward_index > >();

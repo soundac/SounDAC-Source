@@ -132,7 +132,8 @@ namespace muse { namespace chain {
       impl_balance_object_type,
       impl_vesting_delegation_object_type,
       impl_vesting_delegation_expiration_object_type,
-      impl_stream_report_request_object_type
+      impl_stream_report_request_object_type,
+      impl_streaming_platform_user_object_type
    };
 
    class operation_object;
@@ -144,6 +145,7 @@ namespace muse { namespace chain {
    class streaming_platform_object;
    class streaming_platform_vote_object;
    class stream_report_request_object;
+   class streaming_platform_user_object;
    class report_object;
    class account_object;
    class feed_history_object;
@@ -168,7 +170,6 @@ namespace muse { namespace chain {
    class balance_object;
    class vesting_delegation_object;
    class vesting_delegation_expiration_object;
-
 
    typedef object_id< implementation_ids, impl_operation_object_type,                        operation_object >                        operation_id_type;
    typedef object_id< implementation_ids, impl_account_history_object_type,                  account_history_object >                  account_history_id_type;
@@ -203,6 +204,7 @@ namespace muse { namespace chain {
    typedef object_id< implementation_ids, impl_vesting_delegation_object_type,               vesting_delegation_object>                vesting_delegation_id_type;
    typedef object_id< implementation_ids, impl_vesting_delegation_expiration_object_type,    vesting_delegation_expiration_object>     vesting_delegation_expiration_object_id_type;
    typedef object_id< implementation_ids, impl_stream_report_request_object_type,            stream_report_request_object>             stream_report_request_object_id_type;
+   typedef object_id< implementation_ids, impl_streaming_platform_user_object_type,          streaming_platform_user_object >          streaming_platform_user_id_type;
 
 
    typedef fc::ripemd160                                        block_id_type;
@@ -349,6 +351,7 @@ FC_REFLECT_ENUM( muse::chain::impl_object_type,
                  (impl_vesting_delegation_object_type)
                  (impl_vesting_delegation_expiration_object_type)
                  (impl_stream_report_request_object_type)
+                 (impl_streaming_platform_user_object_type)
                )
 
 FC_REFLECT_TYPENAME( muse::chain::share_type )
@@ -364,4 +367,3 @@ FC_REFLECT_TYPENAME( muse::chain::account_history_id_type )
 FC_REFLECT_TYPENAME( muse::chain::hardfork_property_id_type )
 FC_REFLECT_TYPENAME( muse::chain::proposal_id_type )
 FC_REFLECT( muse::chain::void_t, )
-

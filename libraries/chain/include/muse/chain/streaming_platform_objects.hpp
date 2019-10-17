@@ -48,6 +48,8 @@ namespace muse { namespace chain {
           */
          uint32_t full_users_time = 0;
 
+         uint64_t total_anon_listening_time = 0;
+
          streaming_platform_id_type get_id()const { return id; }
    };
 
@@ -88,6 +90,17 @@ namespace muse { namespace chain {
          optional<account_id_type> playlist_creator;
          optional<streaming_platform_id_type> spinning_platform;
          optional<uint16_t> reward_pct;
+   };
+
+   class streaming_platform_user_object : public abstract_object<streaming_platform_user_object>
+   {
+      public:
+         static const uint8_t space_id = implementation_ids;
+         static const uint8_t type_id  = impl_streaming_platform_user_object_type;
+
+         streaming_platform_id_type streaming_platform;
+         uint64_t                   sp_user_id;
+         uint32_t                   total_listening_time = 0;
    };
 
   /**
@@ -181,6 +194,20 @@ namespace muse { namespace chain {
       >
    > report_object_multi_index_type;
    typedef generic_index< report_object, report_object_multi_index_type > report_index;
+
+   typedef multi_index_container<
+      streaming_platform_user_object,
+      indexed_by<
+         ordered_unique< tag<by_id>, member< object, object_id_type, &object::id > >,
+         ordered_unique< tag<by_consumer>,
+            composite_key< streaming_platform_user_object,
+               member< streaming_platform_user_object, streaming_platform_id_type, &streaming_platform_user_object::streaming_platform >,
+               member< streaming_platform_user_object, uint64_t, &streaming_platform_user_object::sp_user_id >
+            >
+         >
+      >
+   > streaming_platform_user_object_multi_index_type;
+   typedef generic_index< streaming_platform_user_object, streaming_platform_user_object_multi_index_type > streaming_platform_user_index;
 } }
 
 FC_REFLECT_DERIVED( muse::chain::streaming_platform_object, (graphene::db::object),
@@ -188,6 +215,7 @@ FC_REFLECT_DERIVED( muse::chain::streaming_platform_object, (graphene::db::objec
                     (created)
                     (url)(votes)
                     (active_users)(full_time_users)(total_listening_time)(full_users_time)
+                    (total_anon_listening_time)
                   )
 FC_REFLECT_DERIVED( muse::chain::streaming_platform_vote_object, (graphene::db::object), (streaming_platform)(account) )
 
@@ -202,3 +230,5 @@ FC_REFLECT_DERIVED( muse::chain::report_object, (graphene::db::object),
                     (playlist_creator)
                   )
 
+FC_REFLECT_DERIVED( muse::chain::streaming_platform_user_object, (graphene::db::object),
+                    (streaming_platform)(sp_user_id)(total_listening_time) )
