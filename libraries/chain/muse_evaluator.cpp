@@ -150,8 +150,9 @@ void cancel_stream_reporting_evaluator::do_apply( const cancel_stream_reporting_
 
 void streaming_platform_report_evaluator::do_apply ( const streaming_platform_report_operation& o )
 {
-   const auto& consumer = db().get_account( o.consumer );
-   FC_ASSERT( o.play_time + consumer.total_listening_time <= 86400, "User cannot cannot listen for more than 86400 seconds per day" );
+   if( !db().has_hardfork( MUSE_HARDFORK_0_5 ) )
+      FC_ASSERT( is_valid_account_name(o.consumer), "Invalid consumer" );
+
    const auto& stp = db().get_streaming_platform( o.streaming_platform );
    const streaming_platform_object* spp = nullptr;
    uint16_t reward_pct = 0;
@@ -166,12 +167,36 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
       reward_pct = srr->reward_pct;
    }
 
+   const account_object* consumer_account = nullptr;
+   const streaming_platform_user_object* consumer_sp_user = nullptr;
+   if( !o.consumer.empty() )
+   {
+      consumer_account = &db().get_account( o.consumer );
+      FC_ASSERT( o.play_time + consumer_account->total_listening_time <= 86400,
+                 "User cannot cannot listen for more than 86400 seconds per day" );
+   }
+   else if( o.ext.value.sp_user_id.valid() )
+   {
+      const auto& sp_user_idx = db().get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
+      const auto& itr = sp_user_idx.find( boost::make_tuple( spp == nullptr ? stp.id : spp->id,
+                                                             *o.ext.value.sp_user_id ) );
+      if( itr != sp_user_idx.end() )
+      {
+         consumer_sp_user = &(*itr);
+         FC_ASSERT( o.play_time + consumer_sp_user->total_listening_time <= 86400,
+                    "User cannot cannot listen for more than 86400 seconds per day" );
+      }
+   }
+
    FC_ASSERT ( db().is_voted_streaming_platform( o.streaming_platform ));
    const auto& content = db().get_content( o.content );
    FC_ASSERT( !content.disabled );
 
-   db().create< report_object>( [&consumer,&stp,this,&content,&o,spp,reward_pct](report_object& ro) {
-        ro.consumer = consumer.id;
+   db().create< report_object>( [consumer_account,&stp,spp,this,&content,&o,reward_pct](report_object& ro) {
+        if( consumer_account != nullptr )
+           ro.consumer = consumer_account->id;
+        if( o.ext.value.sp_user_id.valid() )
+           ro.sp_user_id = *o.ext.value.sp_user_id;
         ro.streaming_platform = stp.id;
         ro.created = db().head_block_time();
         ro.content = content.id;
@@ -186,20 +211,48 @@ void streaming_platform_report_evaluator::do_apply ( const streaming_platform_re
         }
    });
 
-   const auto prev_listening_time = consumer.total_listening_time;
-   uint32_t prev_platform_listening_time = 0;
-   db().modify< account_object >(consumer, [&o,&stp,spp,&prev_platform_listening_time]( account_object &a ) {
-      a.total_listening_time += o.play_time;
-      auto sp_id = spp == nullptr ? stp.id : spp->id;
-      auto entry = a.total_time_by_platform.find( sp_id );
-      if( entry == a.total_time_by_platform.end() )
-         a.total_time_by_platform[sp_id] = o.play_time;
-      else
+   uint64_t prev_listening_time = 0;
+   uint64_t prev_platform_listening_time = 0;
+   if( consumer_account != nullptr )
+   { // normal user
+      prev_listening_time = consumer_account->total_listening_time;
+      db().modify< account_object >(*consumer_account, [&o,&stp,spp,&prev_platform_listening_time]( account_object &a ) {
+         a.total_listening_time += o.play_time;
+         auto sp_id = spp ? spp->id : stp.id;
+         auto entry = a.total_time_by_platform.find( sp_id );
+         if( entry == a.total_time_by_platform.end() )
+            a.total_time_by_platform[sp_id] = o.play_time;
+         else
+         {
+            prev_platform_listening_time = entry->second;
+            entry->second += o.play_time;
+         }
+      });
+   }
+   else if( o.ext.value.sp_user_id.valid() )
+   { // pseudonymous user
+      if( consumer_sp_user != nullptr )
       {
-         prev_platform_listening_time = entry->second;
-         entry->second += o.play_time;
+         prev_listening_time = prev_platform_listening_time = consumer_sp_user->total_listening_time;
+         db().modify( *consumer_sp_user, [&o]( streaming_platform_user_object &sp ) {
+            sp.total_listening_time += o.play_time;
+         });
       }
-   });
+      else
+         db().create<streaming_platform_user_object>( [&o,&stp,spp] ( streaming_platform_user_object& sp ) {
+            sp.streaming_platform = spp ? spp->id : stp.id;
+            sp.sp_user_id = *o.ext.value.sp_user_id;
+            sp.total_listening_time = o.play_time;
+         });
+   }
+   else
+   { // anonymous user
+      const auto& spinning_platform = spp == nullptr ? stp : *spp;
+      prev_listening_time = prev_platform_listening_time = spinning_platform.total_anon_listening_time;
+      db().modify( spinning_platform, [&o]( streaming_platform_object &sp ) {
+         sp.total_anon_listening_time += o.play_time;
+      });
+   }
 
    db().modify( db().get_dynamic_global_properties(), [prev_listening_time, &o] ( dynamic_global_property_object &dgpo ){
       if( prev_listening_time < 3600 )

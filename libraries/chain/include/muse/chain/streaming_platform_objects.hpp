@@ -83,7 +83,8 @@ namespace muse { namespace chain {
          static const uint8_t type_id  = impl_report_object_type;
 
          streaming_platform_id_type streaming_platform;
-         account_id_type consumer;
+         optional<account_id_type> consumer;
+         optional<uint64_t> sp_user_id;
          content_id_type content;
          time_point_sec created;
          uint32_t play_time;
@@ -175,7 +176,7 @@ namespace muse { namespace chain {
          ordered_unique< tag<by_id>, member< object, object_id_type, &object::id > >,
          ordered_unique< tag<by_consumer>, 
             composite_key< report_object, 
-               member< report_object, account_id_type, &report_object::consumer >,
+               member< report_object, fc::optional<account_id_type>, &report_object::consumer >,
                member< object, object_id_type,  &object::id >
             >
          >,

@@ -338,6 +338,7 @@ struct streaming_platform_report_operation : public base_operation
    struct report_extensions
    {
       optional<string> spinning_platform;
+      optional<unsigned_int> sp_user_id;
    };
    string streaming_platform; //<Platform submiting the report
    string consumer; //<Consumer of the art piece

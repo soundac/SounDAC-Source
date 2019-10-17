@@ -172,9 +172,9 @@ void account_streaming_platform_vote_operation::validate() const {
 
 void streaming_platform_report_operation::validate() const {
    FC_ASSERT(is_valid_account_name(streaming_platform), "Invalid streaming platform");
-   FC_ASSERT(is_valid_account_name(consumer), "Invalid consumer");
    FC_ASSERT( play_time > 0, "Reported time must be greater than 0" );
-   FC_ASSERT( play_time <= 86400, "Reported time cannot exceed 1 day" );
+   FC_ASSERT( play_time <= 86400 || ( consumer.empty() && !ext.value.sp_user_id.valid() ),
+              "Reported time cannot exceed 1 day, except for anonymous users" );
    FC_ASSERT( dummy1 == 0, "dummy1 must equal 0" );
    FC_ASSERT( dummy2 == 0, "dummy2 must equal 0" );
    if( ext.value.spinning_platform.valid() )
@@ -182,6 +182,8 @@ void streaming_platform_report_operation::validate() const {
       FC_ASSERT( is_valid_account_name( *ext.value.spinning_platform ), "Invalid spinning platform");
       FC_ASSERT( *ext.value.spinning_platform != streaming_platform, "Can't self-report" );
    }
+   if( ext.value.sp_user_id.valid() )
+      FC_ASSERT( consumer.empty(), "sp_user_id conflicts with consumer" );
 }
 
 void friendship_operation::validate() const {

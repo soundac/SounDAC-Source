@@ -1807,7 +1807,7 @@ asset database::process_content_cashout( const asset& content_reward )
          sp = platforms.find( spinner_id );
       }
 
-      const account_object & consumer = get<account_object>( itr->consumer );
+      const account_object& consumer = get<account_object>( *itr->consumer );
       auto report_reward = calculate_report_reward( *this, dgpo, total_payout, itr->play_time, sp->second, consumer );
       const content_object& content = get<content_object>( itr->content );
       auto content_payment = pay_to_content( content, report_reward, itr->streaming_platform );

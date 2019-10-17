@@ -455,7 +455,7 @@ BOOST_AUTO_TEST_CASE( simple_test )
       vector<report_object> reports = dbapi.get_reports_for_account( "colette" );
       BOOST_CHECK_EQUAL( 1, reports.size() );
       BOOST_CHECK_EQUAL( suzys.id, reports[0].streaming_platform );
-      BOOST_CHECK_EQUAL( colette_id, reports[0].consumer );
+      BOOST_CHECK_EQUAL( colette_id, *reports[0].consumer );
       BOOST_CHECK_EQUAL( song1.id, reports[0].content );
       BOOST_CHECK_EQUAL( db.head_block_time().sec_since_epoch(), reports[0].created.sec_since_epoch() );
       BOOST_CHECK_EQUAL( 7200, reports[0].play_time );
