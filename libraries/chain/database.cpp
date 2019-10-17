@@ -1640,7 +1640,9 @@ struct sp_helper
 {
    const streaming_platform_object* sp;
    const account_object* sp_acct;
-   flat_map<account_id_type, uint32_t> listening_times;
+   flat_map<account_id_type, uint32_t> account_listening_times;
+   flat_map<uint64_t, uint32_t> user_listening_times;
+   uint64_t anon_listening_time = 0;
 
    share_type get_vesting_stake()const
    {
@@ -1651,35 +1653,25 @@ struct sp_helper
 
 static asset calculate_report_reward( const database& db, const dynamic_global_property_object& dgpo,
                                       const asset& total_payout, const uint32_t play_time,
-                                      const sp_helper& platform, const account_object& consumer )
+                                      const sp_helper& platform, const uint64_t total_listening_time )
 {
    share_type stake = platform.get_vesting_stake();
    if( stake.value == 0 || total_payout.amount.value == 0 )
       return asset( 0, total_payout.asset_id );
    FC_ASSERT( total_payout.amount.value > 0 );
 
-   uint32_t total_listening_time;
-   if( !db.has_hardfork( MUSE_HARDFORK_0_5 ) )
-      total_listening_time = consumer.total_listening_time;
-   else
-   {
-      auto time_entry = consumer.total_time_by_platform.find( platform.sp->id );
-      FC_ASSERT( time_entry != consumer.total_time_by_platform.end() );
-      total_listening_time = time_entry->second;
-   }
-
-   dlog("process content cashout ", ("consumer.total_listening_time", total_listening_time));
+   dlog("process content cashout ", ("total_listening_time", total_listening_time));
 
    fc::uint128_t pay_reserve = total_payout.amount.value;
    pay_reserve *= play_time;
    if( !db.has_hardfork( MUSE_HARDFORK_0_2 ) )
       pay_reserve = pay_reserve / dgpo.active_users;
    else if( !db.has_hardfork( MUSE_HARDFORK_0_5 ) )
-      pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) ) / dgpo.full_users_time;
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint64_t(3600) ) / dgpo.full_users_time;
    else
    {
       pay_reserve = pay_reserve * stake.value / dgpo.total_vested_by_platforms.value;
-      pay_reserve = pay_reserve * std::min( total_listening_time, uint32_t(3600) )
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint64_t(3600) )
                                 / platform.sp->full_users_time;
    }
    pay_reserve = pay_reserve / total_listening_time;
@@ -1687,8 +1679,8 @@ static asset calculate_report_reward( const database& db, const dynamic_global_p
    return asset( pay_reserve.to_uint64(), total_payout.asset_id );
 }
 
-static void adjust_listening_times( flat_map<account_id_type, uint32_t>& listening_times,
-                                    account_id_type consumer, uint32_t play_time )
+template<typename K>
+static void adjust_listening_times( flat_map<K, uint32_t>& listening_times, K consumer, uint32_t play_time )
 {
    auto listened = listening_times.find( consumer );
    if( listened == listening_times.end() )
@@ -1721,6 +1713,7 @@ static void adjust_statistics( database& db, const dynamic_global_property_objec
 {
    const bool adjust_consumer_total = db.has_hardfork( MUSE_HARDFORK_0_2 );
 
+   const auto& sp_user_idx = db.get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
    uint32_t global_active_users_delta = 0;
    uint32_t global_full_time_users_delta = 0;
    uint32_t global_total_listening_time_delta = 0;
@@ -1731,7 +1724,8 @@ static void adjust_statistics( database& db, const dynamic_global_property_objec
       uint32_t platform_full_time_users_delta = 0;
       uint32_t platform_total_listening_time_delta = 0;
       uint32_t platform_full_users_time_delta = 0;
-      for ( const auto& listened : sph.second.listening_times )
+      // count normal users
+      for ( const auto& listened : sph.second.account_listening_times )
       {
          const account_object& consumer = db.get<account_object>( listened.first );
          auto global_time_before = consumer.total_listening_time;
@@ -1757,15 +1751,48 @@ static void adjust_statistics( database& db, const dynamic_global_property_objec
                        platform_active_users_delta, platform_full_time_users_delta,
                        platform_total_listening_time_delta, platform_full_users_time_delta );
       }
+      // count pseudonymous users
+      for ( const auto& listened : sph.second.user_listening_times )
+      {
+         const auto& itr = sp_user_idx.find( boost::make_tuple( sph.first, listened.first ) );
+         const streaming_platform_user_object& consumer = *itr;
+         auto global_time_before = consumer.total_listening_time;
+         if( consumer.total_listening_time == listened.second )
+            db.remove( consumer );
+         else
+            db.modify( consumer, [&listened,adjust_consumer_total,&sph] ( streaming_platform_user_object& a ) {
+               a.total_listening_time -= listened.second;
+            });
+
+         adjust_delta( global_time_before, global_time_before - listened.second,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         adjust_delta( global_time_before, global_time_before - listened.second,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
+      // count anon user
+      if( sph.second.anon_listening_time > 0 )
+      {
+         adjust_delta( sph.second.sp->total_anon_listening_time,
+                       sph.second.sp->total_anon_listening_time - sph.second.anon_listening_time,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         adjust_delta( sph.second.sp->total_anon_listening_time,
+                       sph.second.sp->total_anon_listening_time - sph.second.anon_listening_time,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
       if( platform_total_listening_time_delta > 0 || platform_full_users_time_delta > 0
             || platform_full_time_users_delta > 0 || platform_active_users_delta > 0 )
          db.modify( *sph.second.sp, [platform_total_listening_time_delta,platform_full_users_time_delta,
-                                     platform_full_time_users_delta,platform_active_users_delta]
+                                     platform_full_time_users_delta,platform_active_users_delta,&sph]
                                     ( streaming_platform_object& o ) {
             o.active_users -= platform_active_users_delta;
             o.full_time_users -= platform_full_time_users_delta;
             o.total_listening_time -= platform_total_listening_time_delta;
             o.full_users_time -= platform_full_users_time_delta;
+            o.total_anon_listening_time -= sph.second.anon_listening_time;
          });
    } // for platforms
 
@@ -1789,6 +1816,7 @@ asset database::process_content_cashout( const asset& content_reward )
    
    asset total_payout = has_hardfork( MUSE_HARDFORK_0_2 ) ? content_reward : get_content_reward();
 
+   const auto& sp_user_idx = get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
    const auto& ridx = get_index_type<report_index>().indices().get<by_created>();
    const auto& dgpo = get_dynamic_global_properties();
    auto itr = ridx.begin();
@@ -1807,8 +1835,34 @@ asset database::process_content_cashout( const asset& content_reward )
          sp = platforms.find( spinner_id );
       }
 
-      const account_object& consumer = get<account_object>( *itr->consumer );
-      auto report_reward = calculate_report_reward( *this, dgpo, total_payout, itr->play_time, sp->second, consumer );
+      const account_object* consumer_account = nullptr;
+      const streaming_platform_user_object* consumer_sp_user = nullptr;
+      uint64_t total_listening_time = 0;
+      if( itr->consumer.valid() )
+      {
+         consumer_account = &get<account_object>( *itr->consumer );
+         if( !has_hardfork( MUSE_HARDFORK_0_5 ) )
+            total_listening_time = consumer_account->total_listening_time;
+         else
+         {
+            auto time_entry = consumer_account->total_time_by_platform.find( spinner_id );
+            FC_ASSERT( time_entry != consumer_account->total_time_by_platform.end() );
+            total_listening_time = time_entry->second;
+         }
+      }
+      else if( itr->sp_user_id.valid() )
+      {
+         const auto& spu = sp_user_idx.find( boost::make_tuple( spinner_id, *itr->sp_user_id ) );
+         if( spu != sp_user_idx.end() ) // should always be true
+         {
+            consumer_sp_user = &(*spu);
+            total_listening_time = consumer_sp_user->total_listening_time;
+         }
+      }
+      else
+         total_listening_time = sp->second.sp->total_anon_listening_time;
+      auto report_reward = calculate_report_reward( *this, dgpo, total_payout, itr->play_time, sp->second,
+                                                    total_listening_time );
       const content_object& content = get<content_object>( itr->content );
       auto content_payment = pay_to_content( content, report_reward, itr->streaming_platform );
       paid += content_payment;
@@ -1833,10 +1887,18 @@ asset database::process_content_cashout( const asset& content_reward )
       }
       else // before hf_0_5 platform_reward is paid out in pay_to_content()
          if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
-            modify<account_object>(consumer, [&itr](account_object & a){
+            modify( *consumer_account, [&itr]( account_object& a ) {
                a.total_listening_time -= itr->play_time;
             });
-      adjust_listening_times( sp->second.listening_times, consumer.id, itr->play_time );
+
+      if( consumer_account != nullptr )
+         adjust_listening_times( sp->second.account_listening_times, account_id_type(consumer_account->id),
+                                 itr->play_time );
+      else if( consumer_sp_user != nullptr )
+         adjust_listening_times( sp->second.user_listening_times, consumer_sp_user->sp_user_id, itr->play_time );
+      else
+         sp->second.anon_listening_time += itr->play_time;
+
       remove(*itr);
       itr = ridx.begin();
    }
