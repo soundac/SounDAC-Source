@@ -1,4 +1,4 @@
-
+#include <muse/chain/protocol/ext.hpp>
 
 #include <muse/plugins/auth_util/auth_util_api.hpp>
 #include <muse/plugins/auth_util/auth_util_plugin.hpp>

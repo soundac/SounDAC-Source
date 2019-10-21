@@ -1,4 +1,4 @@
-
+#include <muse/chain/protocol/ext.hpp>
 
 #include <muse/plugins/raw_block/raw_block_api.hpp>
 #include <muse/plugins/raw_block/raw_block_plugin.hpp>

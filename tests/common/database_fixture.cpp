@@ -1,6 +1,7 @@
 #include <boost/test/unit_test.hpp>
 #include <boost/program_options.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <graphene/db/simple_index.hpp>
 #include <graphene/utilities/tempdir.hpp>
 
