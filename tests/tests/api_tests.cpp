@@ -24,6 +24,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/app/database_api.hpp>
 #include <muse/chain/protocol/operations.hpp>
 

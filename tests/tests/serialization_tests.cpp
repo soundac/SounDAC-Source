@@ -23,6 +23,7 @@
  */
 #include <boost/test/unit_test.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/chain/base_objects.hpp>
 #include <muse/chain/database.hpp>
 

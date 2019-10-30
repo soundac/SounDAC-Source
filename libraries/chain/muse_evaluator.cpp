@@ -9,7 +9,6 @@
 
 namespace muse { namespace chain {
 
-
 void streaming_platform_update_evaluator::do_apply( const streaming_platform_update_operation& o )
 {
    const auto& sp_account=db().get_account( o.owner ); // verify owner exists
@@ -38,39 +37,256 @@ void streaming_platform_update_evaluator::do_apply( const streaming_platform_upd
            w.created            = db().head_block_time();
       });
       db().pay_fee( sp_account, o.fee );
+      share_type vested = sp_account.vesting_shares.amount
+                          + sp_account.received_vesting_shares.amount
+                          - sp_account.delegated_vesting_shares.amount;
+      if( vested != 0 )
+         db().modify( db().get_dynamic_global_properties(),
+                      [vested] ( dynamic_global_property_object& dgpo ) {
+            dgpo.total_vested_by_platforms += vested;
+         });
+   }
+}
 
+void request_stream_reporting_evaluator::do_apply( const request_stream_reporting_operation& o )
+{
+   FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet!" );
+
+   const auto& by_streaming_platform_name_idx = db().get_index_type< streaming_platform_index >().indices().get< by_name >();
+   const auto requestor_sp = by_streaming_platform_name_idx.find( o.requestor );
+   FC_ASSERT( requestor_sp != by_streaming_platform_name_idx.end(), "No such streaming platform '${p}'",
+              ("p",o.requestor) );
+   const auto reporter_sp = by_streaming_platform_name_idx.find( o.reporter );
+   FC_ASSERT( reporter_sp != by_streaming_platform_name_idx.end(), "No such streaming platform '${p}'",
+              ("p",o.reporter) );
+
+   const auto& requestor_ac = db().get_account( o.requestor );
+   const auto& reporter_ac = db().get_account( o.reporter );
+   const uint64_t redelegated = ( fc::uint128_t( requestor_ac.received_vesting_shares.amount.value )
+                                  * o.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+   FC_ASSERT( static_cast<int64_t>( redelegated ) <= requestor_ac.received_vesting_shares.amount.value );
+   share_type redelegation_delta = redelegated;
+   uint32_t total_pct = 0;
+   uint16_t prev_pct = 0;
+   for( const auto& r : requestor_ac.redelegations )
+   {
+      if( r.first == reporter_ac.id )
+      {
+         prev_pct = r.second.redelegate_pct;
+         total_pct += o.redelegate_pct.value;
+         redelegation_delta = redelegated - r.second.redelegated;
+      }
+      else
+         total_pct += r.second.redelegate_pct;
+      FC_ASSERT( total_pct <= MUSE_100_PERCENT, "Cannot redelegate more than 100% in total" );
+   }
+
+   const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
+   if( srr != by_platforms_idx.end() )
+   {
+      FC_ASSERT( srr->reward_pct != o.reward_pct || o.redelegate_pct != prev_pct, "Entry already exists!" );
+      db().modify( *srr, [&o]( stream_report_request_object& s ) {
+           s.reward_pct = o.reward_pct;
+      });
+   }
+   else
+      db().create< stream_report_request_object >( [&o]( stream_report_request_object& s ) {
+           s.requestor  = o.requestor;
+           s.reporter   = o.reporter;
+           s.reward_pct = o.reward_pct;
+      });
+
+   const auto old_redelegation = requestor_ac.redelegations.find( reporter_ac.id );
+   if( redelegation_delta != 0 || o.redelegate_pct.value > 0
+       || (old_redelegation != requestor_ac.redelegations.end()
+           && old_redelegation->second.redelegate_pct != o.redelegate_pct.value) )
+   {
+      db().modify( requestor_ac, [redelegation_delta,&reporter_ac,&o] ( account_object& acct ) {
+         acct.redelegations[reporter_ac.id].redelegate_pct = o.redelegate_pct;
+         acct.redelegations[reporter_ac.id].redelegated += redelegation_delta;
+         if( acct.redelegations[reporter_ac.id].redelegate_pct == 0 )
+         {
+            FC_ASSERT( acct.redelegations[reporter_ac.id].redelegated == 0 );
+            acct.redelegations.erase( reporter_ac.id );
+         }
+         acct.redelegated_vesting_shares.amount += redelegation_delta;
+      });
+      if( redelegation_delta != 0 )
+      {
+         db().modify( reporter_ac, [redelegation_delta] ( account_object& acct ) {
+            acct.rereceived_vesting_shares.amount += redelegation_delta;
+         });
+      }
+   }
+}
+
+void cancel_stream_reporting_evaluator::do_apply( const cancel_stream_reporting_operation& o )
+{
+   FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet!" );
+
+   const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   const auto srr = by_platforms_idx.find( boost::make_tuple( o.requestor, o.reporter ) );
+   FC_ASSERT( srr != by_platforms_idx.end(), "Can't cancel non-existant request!" );
+   db().remove( *srr );
+
+   const auto& requestor_ac = db().get_account( o.requestor );
+   const auto& reporter_ac = db().get_account( o.reporter );
+   const auto old_redelegation = requestor_ac.redelegations.find( reporter_ac.id );
+   if( old_redelegation != requestor_ac.redelegations.end() )
+   {
+      if( old_redelegation->second.redelegated != 0 )
+      {
+         db().modify( reporter_ac, [&old_redelegation] ( account_object& acct ) {
+            acct.rereceived_vesting_shares.amount -= old_redelegation->second.redelegated;
+         });
+      }
+      db().modify( requestor_ac, [&old_redelegation,&reporter_ac] ( account_object& acct ) {
+         acct.redelegated_vesting_shares.amount -= old_redelegation->second.redelegated;
+         acct.redelegations.erase( reporter_ac.id );
+      });
    }
 }
 
 void streaming_platform_report_evaluator::do_apply ( const streaming_platform_report_operation& o )
 {
-   const auto& consumer = db().get_account( o.consumer );
-   FC_ASSERT( o.play_time + consumer.total_listening_time <= 86400, "User cannot cannot listen for more than 86400 seconds per day" );
-   const auto& spidx = db().get_index_type<streaming_platform_index>().indices().get<by_name>();
-   auto spitr = spidx.find(o.streaming_platform);
-   FC_ASSERT(spitr != spidx.end());
-   const auto& sp = * spitr;
+   if( !db().has_hardfork( MUSE_HARDFORK_0_5 ) )
+      FC_ASSERT( is_valid_account_name(o.consumer), "Invalid consumer" );
+
+   const auto& stp = db().get_streaming_platform( o.streaming_platform );
+   const streaming_platform_object* spp = nullptr;
+   uint16_t reward_pct = 0;
+   if( o.ext.value.spinning_platform.valid() )
+   {
+      FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_5 ), "spinning_platform not allowed yet!" );
+      spp = &db().get_streaming_platform( *o.ext.value.spinning_platform );
+      const auto& by_platforms_idx = db().get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+      const auto srr = by_platforms_idx.find( boost::make_tuple( *o.ext.value.spinning_platform,
+                                                                 o.streaming_platform ) );
+      FC_ASSERT( srr != by_platforms_idx.end(), "spinning_platform has not requested reporting from you" );
+      reward_pct = srr->reward_pct;
+   }
+
+   const account_object* consumer_account = nullptr;
+   const streaming_platform_user_object* consumer_sp_user = nullptr;
+   if( !o.consumer.empty() )
+   {
+      consumer_account = &db().get_account( o.consumer );
+      FC_ASSERT( o.play_time + consumer_account->total_listening_time <= 86400,
+                 "User cannot cannot listen for more than 86400 seconds per day" );
+   }
+   else if( o.ext.value.sp_user_id.valid() )
+   {
+      const auto& sp_user_idx = db().get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
+      const auto& itr = sp_user_idx.find( boost::make_tuple( spp == nullptr ? stp.id : spp->id,
+                                                             *o.ext.value.sp_user_id ) );
+      if( itr != sp_user_idx.end() )
+      {
+         consumer_sp_user = &(*itr);
+         FC_ASSERT( o.play_time + consumer_sp_user->total_listening_time <= 86400,
+                    "User cannot cannot listen for more than 86400 seconds per day" );
+      }
+   }
 
    FC_ASSERT ( db().is_voted_streaming_platform( o.streaming_platform ));
    const auto& content = db().get_content( o.content );
    FC_ASSERT( !content.disabled );
 
-   db().create< report_object>( [&](report_object& ro) {
-        ro.consumer = consumer.id;
-        ro.streaming_platform = sp.id;
+   db().create< report_object>( [consumer_account,&stp,spp,this,&content,&o,reward_pct](report_object& ro) {
+        if( consumer_account != nullptr )
+           ro.consumer = consumer_account->id;
+        if( o.ext.value.sp_user_id.valid() )
+           ro.sp_user_id = *o.ext.value.sp_user_id;
+        ro.streaming_platform = stp.id;
         ro.created = db().head_block_time();
         ro.content = content.id;
         ro.play_time = o.play_time;
         if( o.playlist_creator.size() > 0 ){
            ro.playlist_creator = db().get_account(o.playlist_creator).id;
         }
+        if( spp )
+        {
+           ro.spinning_platform = spp->id;
+           ro.reward_pct = reward_pct;
+        }
    });
 
-   db().modify< account_object >(consumer, [&]( account_object &a){
-        a.total_listening_time += o.play_time;
+   uint64_t prev_listening_time = 0;
+   uint64_t prev_platform_listening_time = 0;
+   if( consumer_account != nullptr )
+   { // normal user
+      prev_listening_time = consumer_account->total_listening_time;
+      db().modify< account_object >(*consumer_account, [&o,&stp,spp,&prev_platform_listening_time]( account_object &a ) {
+         a.total_listening_time += o.play_time;
+         auto sp_id = spp ? spp->id : stp.id;
+         auto entry = a.total_time_by_platform.find( sp_id );
+         if( entry == a.total_time_by_platform.end() )
+            a.total_time_by_platform[sp_id] = o.play_time;
+         else
+         {
+            prev_platform_listening_time = entry->second;
+            entry->second += o.play_time;
+         }
+      });
+   }
+   else if( o.ext.value.sp_user_id.valid() )
+   { // pseudonymous user
+      if( consumer_sp_user != nullptr )
+      {
+         prev_listening_time = prev_platform_listening_time = consumer_sp_user->total_listening_time;
+         db().modify( *consumer_sp_user, [&o]( streaming_platform_user_object &sp ) {
+            sp.total_listening_time += o.play_time;
+         });
+      }
+      else
+         db().create<streaming_platform_user_object>( [&o,&stp,spp] ( streaming_platform_user_object& sp ) {
+            sp.streaming_platform = spp ? spp->id : stp.id;
+            sp.sp_user_id = *o.ext.value.sp_user_id;
+            sp.total_listening_time = o.play_time;
+         });
+   }
+   else
+   { // anonymous user
+      const auto& spinning_platform = spp == nullptr ? stp : *spp;
+      prev_listening_time = prev_platform_listening_time = spinning_platform.total_anon_listening_time;
+      db().modify( spinning_platform, [&o]( streaming_platform_object &sp ) {
+         sp.total_anon_listening_time += o.play_time;
+      });
+   }
+
+   db().modify( db().get_dynamic_global_properties(), [prev_listening_time, &o] ( dynamic_global_property_object &dgpo ){
+      if( prev_listening_time < 3600 )
+      {
+         if( prev_listening_time == 0 )
+            ++dgpo.active_users;
+         if( 3600 - prev_listening_time > o.play_time )
+            dgpo.full_users_time += o.play_time;
+         else
+         {
+            dgpo.full_users_time += 3600 - prev_listening_time;
+            ++dgpo.full_time_users;
+         }
+      }
+      dgpo.total_listening_time += o.play_time;
    });
 
-   db().modify< content_object >(content, [&] (content_object &c){
+   db().modify( spp == nullptr ? stp : *spp, [prev_platform_listening_time, &o] ( streaming_platform_object &sp ){
+      if( prev_platform_listening_time < 3600 )
+      {
+         if( prev_platform_listening_time == 0 )
+            ++sp.active_users;
+         if( 3600 - prev_platform_listening_time > o.play_time )
+            sp.full_users_time += o.play_time;
+         else
+         {
+            sp.full_users_time += 3600 - prev_platform_listening_time;
+            ++sp.full_time_users;
+         }
+      }
+      sp.total_listening_time += o.play_time;
+   });
+
+   db().modify< content_object >(content, [] (content_object &c){
         ++c.times_played;
         ++c.times_played_24;
    });

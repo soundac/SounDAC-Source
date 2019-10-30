@@ -4,6 +4,8 @@
 #include <string>
 #include <utility>
 
+#include <muse/chain/protocol/ext.hpp>
+
 #include <fc/api.hpp>
 
 namespace fc { namespace rpc {

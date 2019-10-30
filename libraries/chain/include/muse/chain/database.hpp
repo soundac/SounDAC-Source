@@ -311,7 +311,7 @@ namespace muse { namespace chain {
          vector<string> get_voted_streaming_platforms();
          void process_vesting_withdrawals();
 
-         asset pay_to_content(content_id_type content, asset payout, streaming_platform_id_type platform);
+         asset pay_to_content(const content_object & content, asset payout, streaming_platform_id_type platform);
          void pay_to_content_master(const content_object &content, const asset& payout);
          void pay_to_content_comp(const content_object &content, const asset& payout);
 
@@ -325,8 +325,6 @@ namespace muse { namespace chain {
 
          asset get_content_reward()const;
          asset get_curation_reward()const;
-
-      uint16_t get_curation_rewards_percent() const;
 
 
          //////////////////// db_getter.cpp ////////////////////

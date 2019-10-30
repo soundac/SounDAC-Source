@@ -149,16 +149,41 @@ void streaming_platform_update_operation::validate() const {
    FC_ASSERT(fc::is_utf8(url));
 }
 
+void request_stream_reporting_operation::validate() const {
+   FC_ASSERT( is_valid_account_name(requestor), "Requestor account name invalid" );
+   FC_ASSERT( is_valid_account_name(reporter), "Reporter account name invalid" );
+   FC_ASSERT( reporter != requestor, "Cannot request self-reporting" );
+   FC_ASSERT( reward_pct >= 0 && reward_pct.value <= MUSE_100_PERCENT,
+              "Invalid reward scaled percentage value!" );
+   FC_ASSERT( redelegate_pct >= 0 && redelegate_pct.value <= MUSE_100_PERCENT,
+              "Invalid redelegation scaled percentage value!" );
+}
+
+void cancel_stream_reporting_operation::validate() const {
+   FC_ASSERT( is_valid_account_name(requestor), "Requestor account name invalid" );
+   FC_ASSERT( is_valid_account_name(reporter), "Reporter account name invalid" );
+   FC_ASSERT( reporter != requestor, "Cannot cancel self-reporting" );
+}
+
 void account_streaming_platform_vote_operation::validate() const {
    FC_ASSERT(is_valid_account_name(account), "Account ${a}", ("a", account));
    FC_ASSERT(is_valid_account_name(streaming_platform));
 }
 
 void streaming_platform_report_operation::validate() const {
-   FC_ASSERT(is_valid_account_name(streaming_platform), "Invalid account");
-   FC_ASSERT(is_valid_account_name(consumer), "Invalid account");
+   FC_ASSERT(is_valid_account_name(streaming_platform), "Invalid streaming platform");
    FC_ASSERT( play_time > 0, "Reported time must be greater than 0" );
-   FC_ASSERT( play_time <= 86400, "Reported time cannot exceed 1 day" );
+   FC_ASSERT( play_time <= 86400 || ( consumer.empty() && !ext.value.sp_user_id.valid() ),
+              "Reported time cannot exceed 1 day, except for anonymous users" );
+   FC_ASSERT( dummy1 == 0, "dummy1 must equal 0" );
+   FC_ASSERT( dummy2 == 0, "dummy2 must equal 0" );
+   if( ext.value.spinning_platform.valid() )
+   {
+      FC_ASSERT( is_valid_account_name( *ext.value.spinning_platform ), "Invalid spinning platform");
+      FC_ASSERT( *ext.value.spinning_platform != streaming_platform, "Can't self-report" );
+   }
+   if( ext.value.sp_user_id.valid() )
+      FC_ASSERT( consumer.empty(), "sp_user_id conflicts with consumer" );
 }
 
 void friendship_operation::validate() const {
