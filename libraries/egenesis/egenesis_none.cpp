@@ -22,11 +22,11 @@
  * THE SOFTWARE.
  */
 
-#include <graphene/egenesis/egenesis.hpp>
+#include <muse/egenesis/egenesis.hpp>
 
-namespace graphene { namespace egenesis {
+namespace muse { namespace egenesis {
 
-using namespace graphene::chain;
+using namespace muse::chain;
 
 chain_id_type get_egenesis_chain_id()
 {

@@ -2,7 +2,9 @@
 project( MUSE_2_0 )
 cmake_minimum_required( VERSION 2.8.12 )
 
-set( BLOCKCHAIN_NAME "Muse" )
+set( BLOCKCHAIN_NAME "Muse-Test" )
+
+set( MUSE_EGENESIS_JSON "${CMAKE_CURRENT_SOURCE_DIR}/genesis-test.json" )
 
 set( GUI_CLIENT_EXECUTABLE_NAME MUSE )
 set( CUSTOM_URL_SCHEME "gcs" )

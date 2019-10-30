@@ -6,8 +6,8 @@ ENV DATADIR "/data"
 ENV LANG=en_US.UTF-8
 
 # Make Ports Available
-EXPOSE 8090
-EXPOSE 33333
+EXPOSE 18090
+EXPOSE 33332
 
 RUN mkdir -p "${DATADIR}" /usr/local/bin
 
@@ -95,3 +95,4 @@ COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
 COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
 COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
 COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
+COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
