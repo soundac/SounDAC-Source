@@ -81,7 +81,9 @@ namespace muse { namespace chain {
 
             account_create_with_delegation_operation,
             delegate_vesting_shares_operation,
-            return_vesting_delegation_operation
+            return_vesting_delegation_operation,
+            request_stream_reporting_operation,
+            cancel_stream_reporting_operation
          > operation;
 
    void operation_get_required_authorities( const operation& op,

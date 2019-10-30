@@ -59,4 +59,6 @@ DEFINE_EVALUATOR( friendship )
 DEFINE_EVALUATOR( unfriend )
 DEFINE_EVALUATOR( balance_claim )
 DEFINE_EVALUATOR( delegate_vesting_shares )
+DEFINE_EVALUATOR( request_stream_reporting )
+DEFINE_EVALUATOR( cancel_stream_reporting )
 } } // muse::chain

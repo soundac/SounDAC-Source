@@ -1,5 +1,6 @@
 #pragma once
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/chain/protocol/types.hpp>
 #include <muse/chain/protocol/authority.hpp>
 #include <muse/chain/protocol/version.hpp>

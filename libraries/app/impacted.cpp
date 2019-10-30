@@ -192,6 +192,18 @@ public:
       _impacted.insert( op.owner );
    }
 
+   void operator()( const request_stream_reporting_operation& op )
+   {
+      _impacted.insert( op.requestor );
+      _impacted.insert( op.reporter );
+   }
+
+   void operator()( const cancel_stream_reporting_operation& op )
+   {
+      _impacted.insert( op.requestor );
+      _impacted.insert( op.reporter );
+   }
+
    void operator()( const account_streaming_platform_vote_operation& op )
    {
       _impacted.insert( op.account );
@@ -202,6 +214,8 @@ public:
    {
       _impacted.insert( op.streaming_platform );
       _impacted.insert( op.consumer );
+      if( op.ext.value.spinning_platform.valid() )
+         _impacted.insert( *op.ext.value.spinning_platform );
    }
 
    void operator()( const friendship_operation& op )

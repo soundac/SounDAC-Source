@@ -628,9 +628,9 @@ namespace muse { namespace chain {
     * during an attack. These 30 days match the 30 days that an
     * owner authority is valid for recovery purposes.
     *
-    * On account creation the recovery account is set either to the creator of
-    * the account (The account that pays the creation fee and is a signer on the transaction)
-    * or to the empty string if the account was mined. An account with no recovery
+    * On account creation the recovery account is set to the creator of the
+    * account (i. e. the account that pays the creation fee and is a signer on
+    * the transaction). An account with no recovery
     * has the top voted witness as a recovery account, at the time the recover
     * request is created. Note: This does mean the effective recovery account
     * of an account with no listed recovery account can change at any time as

@@ -24,6 +24,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/app/database_api.hpp>
 
 #include <graphene/utilities/tempdir.hpp>
@@ -33,7 +34,7 @@
 using namespace muse::chain;
 using namespace graphene::db;
 
-BOOST_FIXTURE_TEST_SUITE( muse_tests, clean_database_fixture )
+BOOST_FIXTURE_TEST_SUITE( muse_tests, database_fixture )
 
 #define FAIL( msg, op ) FAIL_WITH( msg, op, fc::assert_exception )
 
@@ -47,6 +48,8 @@ BOOST_AUTO_TEST_CASE( streaming_platform_test )
 {
    try
    {
+      initialize_clean( MUSE_NUM_HARDFORKS );
+
       muse::app::database_api dbapi(db);
 
       generate_blocks( time_point_sec( MUSE_HARDFORK_0_1_TIME ) );
@@ -191,6 +194,8 @@ BOOST_AUTO_TEST_CASE( simple_test )
 {
    try
    {
+      initialize_clean( 4 );
+
       generate_blocks( time_point_sec( MUSE_HARDFORK_0_2_TIME ) );
       BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
 
@@ -450,10 +455,16 @@ BOOST_AUTO_TEST_CASE( simple_test )
       vector<report_object> reports = dbapi.get_reports_for_account( "colette" );
       BOOST_CHECK_EQUAL( 1, reports.size() );
       BOOST_CHECK_EQUAL( suzys.id, reports[0].streaming_platform );
-      BOOST_CHECK_EQUAL( colette_id, reports[0].consumer );
+      BOOST_CHECK_EQUAL( colette_id, *reports[0].consumer );
       BOOST_CHECK_EQUAL( song1.id, reports[0].content );
       BOOST_CHECK_EQUAL( db.head_block_time().sec_since_epoch(), reports[0].created.sec_since_epoch() );
       BOOST_CHECK_EQUAL( 7200, reports[0].play_time );
+
+      const auto& dgpo = db.get_dynamic_global_properties();
+      BOOST_CHECK_EQUAL( 3, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 2, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 9000, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 12600, dgpo.total_listening_time );
       }
       const auto& played_at = db.head_block_time();
 
@@ -661,20 +672,6 @@ BOOST_AUTO_TEST_CASE( simple_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, alice_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, priscilla_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, cora_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, coreen_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 7200, colette_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 3600, cora_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 1800, coreen_id(db).total_listening_time );
@@ -752,23 +749,14 @@ BOOST_AUTO_TEST_CASE( simple_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, alice_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, priscilla_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, cora_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, coreen_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 0, cora_id(db).total_listening_time );
       BOOST_CHECK_EQUAL( 0, coreen_id(db).total_listening_time );
+
+      BOOST_CHECK_EQUAL( 0, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 0, dgpo.total_listening_time );
       }
 
       validate_database();
@@ -780,6 +768,8 @@ BOOST_AUTO_TEST_CASE( multi_test )
 {
    try
    {
+      initialize_clean( 4 );
+
       generate_blocks( time_point_sec( MUSE_HARDFORK_0_2_TIME ) );
       BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
 
@@ -939,6 +929,12 @@ BOOST_AUTO_TEST_CASE( multi_test )
       tx.operations.clear();
       tx.operations.push_back( spro );
       db.push_transaction( tx, database::skip_transaction_signatures  );
+
+      const auto& dgpo = db.get_dynamic_global_properties();
+      BOOST_CHECK_EQUAL( 1, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 1, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 3600, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 3600, dgpo.total_listening_time );
       }
 
       // --------- Content update ------------
@@ -1052,16 +1048,6 @@ BOOST_AUTO_TEST_CASE( multi_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 3600, colette_id(db).total_listening_time );
 
       generate_blocks( db.head_block_time() + 86400 - MUSE_BLOCK_INTERVAL );
@@ -1118,17 +1104,12 @@ BOOST_AUTO_TEST_CASE( multi_test )
       BOOST_CHECK_EQUAL( 100000, veronica_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, vici_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, penny_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, veronica_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, vici_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
+
+      BOOST_CHECK_EQUAL( 0, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 0, dgpo.total_listening_time );
       }
 
       validate_database();
@@ -1140,6 +1121,8 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
 {
    try
    {
+      initialize_clean( 4 );
+
       generate_blocks( time_point_sec( MUSE_HARDFORK_0_1_TIME ) );
       BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
 
@@ -1212,12 +1195,23 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
       tx.sign( suzy_private_key, db.get_chain_id() );
       db.push_transaction( tx, 0 );
 
+      const auto& dgpo = db.get_dynamic_global_properties();
+      BOOST_CHECK_EQUAL( 1, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 100, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 100, dgpo.total_listening_time );
+
       spro.play_time = 86300;
       tx.operations.clear();
       tx.operations.push_back( spro );
       tx.signatures.clear();
       tx.sign( suzy_private_key, db.get_chain_id() );
       db.push_transaction( tx, 0 );
+
+      BOOST_CHECK_EQUAL( 1, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 1, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 3600, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 86400, dgpo.total_listening_time );
 
       spro.play_time = 1;
       tx.operations.clear();
@@ -1298,13 +1292,6 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
       BOOST_CHECK_EQUAL( 100000, muriel_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 86400, colette_id(db).total_listening_time );
 
       asset daily_content_reward = db.get_content_reward();
@@ -1348,14 +1335,12 @@ BOOST_AUTO_TEST_CASE( simple_authority_test )
       BOOST_CHECK_EQUAL( 100000, muriel_id(db).vesting_shares.amount.value );
       BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
 
-      BOOST_CHECK_EQUAL( 0, suzy_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, uhura_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, paula_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, martha_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, muriel_id(db).curation_rewards.value );
-      BOOST_CHECK_EQUAL( 0, colette_id(db).curation_rewards.value );
-
       BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
+
+      BOOST_CHECK_EQUAL( 0, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 0, dgpo.total_listening_time );
 
       validate_database();
    }
@@ -1366,6 +1351,8 @@ BOOST_AUTO_TEST_CASE( multi_authority_test )
 {
    try
    {
+      initialize_clean( MUSE_NUM_HARDFORKS );
+
       generate_blocks( time_point_sec( MUSE_HARDFORK_0_1_TIME ) );
       BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
 
@@ -1505,6 +1492,8 @@ BOOST_AUTO_TEST_CASE( balance_object_test )
    const auto n_key = generate_private_key("n");
    const auto x_key = generate_private_key("x");
 
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
    // Intentionally overriding the fixture's db; I need to control genesis on this one.
    database db;
    fc::temp_directory td( graphene::utilities::temp_directory_path() );
@@ -1611,6 +1600,8 @@ BOOST_AUTO_TEST_CASE( balance_object_test )
 
 BOOST_AUTO_TEST_CASE( friends_test )
 { try {
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
    ACTORS( (alice)(brenda)(charlene)(dora)(eve) );
 
    fund( "alice", 9000000 );
@@ -1922,6 +1913,8 @@ BOOST_AUTO_TEST_CASE( friends_test )
 
 BOOST_AUTO_TEST_CASE( disable_test )
 { try {
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
    generate_blocks( time_point_sec( MUSE_HARDFORK_0_1_TIME ) );
    BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
 
@@ -2045,7 +2038,1024 @@ BOOST_AUTO_TEST_CASE( disable_test )
       FAIL( "report after disable", spro );
    }
 
+} FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( request_reporting_test )
+{ try {
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
+   ACTORS( (alice)(sarah)(sharon)(suzie) );
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "sharon", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "sharon";
+      spuo.url = "http://bobstracks.com";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+
+   }
+
+   const auto& by_platforms_idx = db.get_index_type< stream_report_request_index >().indices().get< by_platforms >();
+   BOOST_CHECK( by_platforms_idx.empty() );
+
+   {
+   // not allowed yet
+   request_stream_reporting_operation rsr;
+   rsr.requestor = "sarah";
+   rsr.reporter = "suzie";
+   rsr.reward_pct = 50 * MUSE_1_PERCENT;
+   rsr.validate();
+   trx.operations.push_back( rsr );
+   // Can't test - all HF's are applied automatically on test startup
+   //BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+   generate_blocks( time_point_sec( MUSE_HARDFORK_0_5_TIME ) );
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // bad percentage
+   rsr.reward_pct = 101 * MUSE_1_PERCENT;
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reward_pct = 50 * MUSE_1_PERCENT;
+
+   // bad requestor
+   rsr.requestor = "nope.";
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.requestor = "sarah";
+
+   // bad reporter
+   rsr.reporter = "nope.";
+   BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reporter = "suzie";
+
+   // requestor is not a sp
+   rsr.requestor = "alice";
+   rsr.validate();
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.requestor = "sarah";
+
+   // reporter is not a sp
+   rsr.reporter = "alice";
+   rsr.validate();
+   trx.operations[0] = rsr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   rsr.reporter = "suzie";
+
+   // works
+   trx.operations[0] = rsr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+
+   BOOST_CHECK_EQUAL( 1, by_platforms_idx.size() );
+   auto first = by_platforms_idx.begin();
+   BOOST_CHECK_EQUAL( "sarah", first->requestor );
+   BOOST_CHECK_EQUAL( "suzie", first->reporter );
+   BOOST_CHECK_EQUAL( 50 * MUSE_1_PERCENT, first->reward_pct );
+
+   // no-op update fails
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+   // update works
+   rsr.reward_pct = 33 * MUSE_1_PERCENT;
+   trx.operations[0] = rsr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+   BOOST_CHECK_EQUAL( 33 * MUSE_1_PERCENT, first->reward_pct );
+   }
+
+   {
+   cancel_stream_reporting_operation csr;
+   csr.requestor = "sarah";
+   csr.reporter = "suzie";
+   csr.validate();
+
+   // bad requestor
+   csr.requestor = "nope.";
+   BOOST_CHECK_THROW( csr.validate(), fc::assert_exception );
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // bad reporter
+   csr.reporter = "nope.";
+   BOOST_CHECK_THROW( csr.validate(), fc::assert_exception );
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // requestor is not a sp
+   csr.requestor = "alice";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // reporter is not a sp
+   csr.reporter = "alice";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // no such request
+   csr.requestor = "sharon";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.requestor = "sarah";
+
+   // no such request
+   csr.reporter = "sharon";
+   csr.validate();
+   trx.operations[0] = csr;
+   BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+   csr.reporter = "suzie";
+
+   // works
+   trx.operations[0] = csr;
+   db.push_transaction( trx, database::skip_transaction_signatures );
+   BOOST_CHECK( by_platforms_idx.empty() );
+   }
+
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( delegated_reporting_test )
+{ try {
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
+   ACTORS( (alice)(paula)(martha)(sarah)(suzie)(uhura) );
+
+   const auto& platform_idx = db.get_index_type< streaming_platform_index >().indices().get<by_name>();
+   const auto& report_idx = db.get_index_type< report_index >().indices();
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+   const auto sarah_sp = platform_idx.find( "sarah" );
+   BOOST_REQUIRE( sarah_sp != platform_idx.end() );
+   const auto suzie_sp = platform_idx.find( "suzie" );
+   BOOST_REQUIRE( suzie_sp != platform_idx.end() );
+
+   // --------- Create content ------------
+   {
+      content_operation cop;
+      cop.uploader = "uhura";
+      cop.url = "ipfs://abcdef1";
+      cop.album_meta.album_title = "First test song";
+      cop.track_meta.track_title = "First test song";
+      cop.comp_meta.third_party_publishers = false;
+      distribution dist;
+      dist.payee = "paula";
+      dist.bp = MUSE_100_PERCENT;
+      cop.distributions.push_back( dist );
+      management_vote mgmt;
+      mgmt.voter = "martha";
+      mgmt.percentage = 100;
+      cop.management.push_back( mgmt );
+      cop.management_threshold = 100;
+      cop.playing_reward = 10;
+      cop.publishers_share = 0;
+      trx.operations.push_back( cop );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // --------- Sarah reports ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 1, report_idx.size() );
+      const auto report = report_idx.begin();
+      BOOST_CHECK( !report->spinning_platform.valid() );
+      BOOST_CHECK( !report->reward_pct.valid() );
+   }
+
+   // --------- Suzy fails to report for Sarah ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzie";
+      spro.ext.value.spinning_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+      trx.operations.clear();
+   }
+
+   // sarah requests reporting from suzie
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.reward_pct = 50 * MUSE_1_PERCENT;
+      rsr.validate();
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // --------- Suzy reports successfully for Sarah ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzie";
+      spro.ext.value.spinning_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 100;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 2, report_idx.size() );
+      auto report = report_idx.begin();
+      report++;
+      BOOST_REQUIRE( report->spinning_platform.valid() );
+      BOOST_REQUIRE( report->reward_pct.valid() );
+      BOOST_CHECK_EQUAL( sarah_sp->id, *report->spinning_platform );
+      BOOST_CHECK_EQUAL( 50 * MUSE_1_PERCENT, *report->reward_pct );
+   }
+
+   // --------- Sarah reports again ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "sarah";
+      spro.consumer = "alice";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 200;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+
+      BOOST_REQUIRE_EQUAL( 3, report_idx.size() );
+   }
+   
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( delegated_report_payouts )
+{ try {
+   initialize_clean( 5 );
+
+   ACTORS( (sarah)(suzie)(uhura)(paula)(martha)(colette)(cora)(coreen) );
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+   const auto sarah_sp = db.get_streaming_platform( "sarah" );
+   const auto suzie_sp = db.get_streaming_platform( "suzie" );
+
+   // --------- Create content ------------
+   {
+      content_operation cop;
+      cop.uploader = "uhura";
+      cop.url = "ipfs://abcdef1";
+      cop.album_meta.album_title = "First test album";
+      cop.track_meta.track_title = "First test song";
+      cop.comp_meta.third_party_publishers = false;
+      distribution dist;
+      dist.payee = "paula";
+      dist.bp = MUSE_100_PERCENT;
+      cop.distributions.push_back( dist );
+      management_vote mgmt;
+      mgmt.voter = "martha";
+      mgmt.percentage = 100;
+      cop.management.push_back( mgmt );
+      cop.management_threshold = 100;
+      cop.playing_reward = 10;
+      cop.publishers_share = 0;
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef2";
+      cop.track_meta.track_title = "Second test song";
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef3";
+      cop.track_meta.track_title = "Third test song";
+      trx.operations.push_back( cop );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   // sarah requests reporting from suzie
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.reward_pct = 33 * MUSE_1_PERCENT;
+      rsr.validate();
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // --------- Publish playtime ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzie";
+      spro.consumer = "colette";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 7200;
+      spro.ext.value.spinning_platform = "sarah";
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef2";
+      spro.consumer = "cora";
+      spro.play_time = 3600;
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef3";
+      spro.consumer = "coreen";
+      spro.play_time = 1800;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   const auto& played_at = db.head_block_time();
+
+   BOOST_REQUIRE( played_at + 86400 - MUSE_BLOCK_INTERVAL > db.head_block_time() );
+   generate_blocks( played_at + 86400 - MUSE_BLOCK_INTERVAL );
+
+   BOOST_CHECK_EQUAL( 0, sarah_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, suzie_id(db).balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 0, sarah_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, suzie_id(db).mbd_balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 100000, sarah_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, suzie_id(db).vesting_shares.amount.value );
+
+   const auto& dgpo = db.get_dynamic_global_properties();
+   share_type total_vested = dgpo.total_vested_by_platforms;
+   asset daily_content_reward = db.get_content_reward();
+
+   generate_block();
+
+   {
+      const content_object& song1 = db.get_content( "ipfs://abcdef1" );
+      const content_object& song2 = db.get_content( "ipfs://abcdef2" );
+      const content_object& song3 = db.get_content( "ipfs://abcdef3" );
+      BOOST_CHECK_EQUAL( 0, song1.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song1.accumulated_balance_comp.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_comp.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_comp.amount.value );
+
+      share_type paulas_earnings = 0;
+      share_type sarahs_earnings = 0;
+      share_type suzies_earnings = 0;
+
+      // payouts of first song
+      price factor( asset( total_vested + sarahs_earnings + suzies_earnings, daily_content_reward.asset_id ),
+                    asset( 100000 + sarahs_earnings, daily_content_reward.asset_id ) );
+      share_type reward = (daily_content_reward * factor).amount * 2 / 5;
+      share_type platform_reward = reward * song1.playing_reward / MUSE_100_PERCENT;
+      share_type content_reward = reward - platform_reward;
+      share_type reporter_reward = platform_reward * 33 * MUSE_1_PERCENT / MUSE_100_PERCENT;
+      share_type spinner_reward = platform_reward - reporter_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( reporter_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+      sarahs_earnings += ( asset( spinner_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of second song
+      factor = price( asset( total_vested + sarahs_earnings + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 100000 + sarahs_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 2 / 5;
+      platform_reward = reward * song2.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      reporter_reward = platform_reward * 33 * MUSE_1_PERCENT / MUSE_100_PERCENT;
+      spinner_reward = platform_reward - reporter_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( reporter_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+      sarahs_earnings += ( asset( spinner_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of third song
+      factor = price( asset( total_vested + sarahs_earnings + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 100000 + sarahs_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 1 / 5;
+      platform_reward = reward * song2.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      reporter_reward = platform_reward * 33 * MUSE_1_PERCENT / MUSE_100_PERCENT;
+      spinner_reward = platform_reward - reporter_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( reporter_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+      sarahs_earnings += ( asset( spinner_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      BOOST_CHECK_EQUAL( paulas_earnings.value, paula_id(db).balance.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, sarah_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, suzie_id(db).balance.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, sarah_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, suzie_id(db).mbd_balance.amount.value );
+
+      BOOST_CHECK_EQUAL( 100000 + sarahs_earnings.value, sarah_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000 + suzies_earnings.value, suzie_id(db).vesting_shares.amount.value );
+   }
+
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( redelegated_vesting_shares )
+{ try {
+   initialize_clean( MUSE_NUM_HARDFORKS );
+
+   ACTORS( (alice)(sarah)(suzie) )
+
+   // --------- Create platforms ------------
+   {
+      fund( "sarah", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      fund( "suzie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE );
+      trx.operations.clear();
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://soundac.io";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzie";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   fund( "alice", 1000000 );
+   vest( "alice", 1000000 );
+
+   BOOST_CHECK_EQUAL( 1000100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(     100000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(     100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice delegates 2M to sarah
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 2000000, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 998100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   2100000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah requests reporting from suzie and redelegates 33%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 101 * MUSE_1_PERCENT; // too much
+      BOOST_CHECK_THROW( rsr.validate(), fc::assert_exception );
+      trx.operations.push_back( rsr );
+      BOOST_CHECK_THROW( db.push_transaction( trx, database::skip_transaction_signatures ), fc::assert_exception );
+
+      rsr.redelegate_pct = 33 * MUSE_1_PERCENT;
+      rsr.validate();
+      trx.operations[0] = rsr;
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 998100000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1440000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    760000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice increases delegation to sarah to 3.5M
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 3500000, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   2445000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1255000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah increases redelegation to 47%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 47 * MUSE_1_PERCENT;
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1955000, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1745000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // alice decreases delegation to sarah to 999997
+   {
+      delegate_vesting_shares_operation op;
+      op.vesting_shares = asset( 999997, VESTS_SYMBOL );
+      op.delegator = "alice";
+      op.delegatee = "sarah";
+      trx.operations.push_back( op );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   // alice's un-delegation will become effective only after MUSE_DELEGATION_RETURN_PERIOD
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    629999, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    569998, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah decreases redelegation to 7%
+   {
+      request_stream_reporting_operation rsr;
+      rsr.requestor = "sarah";
+      rsr.reporter = "suzie";
+      rsr.redelegate_pct = 7 * MUSE_1_PERCENT;
+      trx.operations.push_back( rsr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1029998, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    169999, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+   // sarah cancels redelegation
+   {
+      cancel_stream_reporting_operation csr;
+      csr.requestor = "sarah";
+      csr.reporter = "suzie";
+      trx.operations.push_back( csr );
+      db.push_transaction( trx, database::skip_transaction_signatures );
+      trx.operations.clear();
+   }
+
+   BOOST_CHECK_EQUAL( 996600000, db.get_effective_vesting_shares( alice, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(   1099997, db.get_effective_vesting_shares( sarah, VESTS_SYMBOL ).amount.value );
+   BOOST_CHECK_EQUAL(    100000, db.get_effective_vesting_shares( suzie, VESTS_SYMBOL ).amount.value );
+
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( split_payout_test )
+{ try {
+
+   initialize_clean( 5 );
+
+   BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+
+   ACTORS( (sarah)(stephanie)(suzy)(uhura)(paula)(priscilla)(martha)(colette)(cora)(coreen) );
+
+   generate_block();
+
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // --------- Create streaming platforms ------------
+   {
+      trx.operations.clear();
+      fund( "sarah",     MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE + 200 );
+      fund( "stephanie", MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE + 200 );
+      fund( "suzy",      MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE + 300 );
+      vest( "sarah", 200 );
+      vest( "stephanie", 200 );
+      vest( "suzy", 300 );
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "sarah";
+      spuo.url = "http://www.sarahs-streams.inc";
+      trx.operations.push_back( spuo );
+      spuo.owner = "stephanie";
+      spuo.url = "http://www.stephs-tracks.com";
+      trx.operations.push_back( spuo );
+      spuo.owner = "suzy";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   // --------- Create content ------------
+   {
+      content_operation cop;
+      cop.uploader = "uhura";
+      cop.url = "ipfs://abcdef1";
+      cop.album_meta.album_title = "First test song";
+      cop.track_meta.track_title = "First test song";
+      cop.comp_meta.third_party_publishers = false;
+      distribution dist;
+      dist.payee = "paula";
+      dist.bp = MUSE_100_PERCENT;
+      cop.distributions.push_back( dist );
+      management_vote mgmt;
+      mgmt.voter = "martha";
+      mgmt.percentage = 100;
+      cop.management.push_back( mgmt );
+      cop.management_threshold = 100;
+      cop.playing_reward = 10;
+      cop.publishers_share = 0;
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef2";
+      cop.playing_reward = 11;
+      cop.publishers_share = 1;
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef3";
+      cop.distributions.begin()->payee = "priscilla";
+      trx.operations.push_back( cop );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   // --------- Publish playtime ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzy";
+      spro.consumer = "colette";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 7200;
+      BOOST_TEST_MESSAGE( "--- Test success" );
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef2";
+      spro.consumer = "cora";
+      spro.play_time = 3600;
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef3";
+      spro.consumer = "coreen";
+      spro.play_time = 1800;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   const auto& played_at = db.head_block_time();
+
+   BOOST_REQUIRE( played_at + 86400 - MUSE_BLOCK_INTERVAL > db.head_block_time() );
+   generate_blocks( played_at + 86400 - MUSE_BLOCK_INTERVAL );
+
+   BOOST_CHECK_EQUAL( 0, suzy_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, uhura_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, paula_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, priscilla_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, martha_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, colette_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, cora_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, coreen_id(db).balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 0, suzy_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, uhura_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, paula_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, priscilla_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, martha_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, colette_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, cora_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, coreen_id(db).mbd_balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 300000, sarah_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 300000, stephanie_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 400000, suzy_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, uhura_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, paula_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, priscilla_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, martha_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, cora_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, coreen_id(db).vesting_shares.amount.value );
+
+   BOOST_CHECK_EQUAL( 7200, colette_id(db).total_listening_time );
+   BOOST_CHECK_EQUAL( 3600, cora_id(db).total_listening_time );
+   BOOST_CHECK_EQUAL( 1800, coreen_id(db).total_listening_time );
+
+   const auto& dgpo = db.get_dynamic_global_properties();
+   share_type total_vested = dgpo.total_vested_by_platforms;
+   asset daily_content_reward = db.get_content_reward();
+
+   generate_block();
+
+   {
+      const content_object& song1 = db.get_content( "ipfs://abcdef1" );
+      const content_object& song2 = db.get_content( "ipfs://abcdef2" );
+      const content_object& song3 = db.get_content( "ipfs://abcdef3" );
+      BOOST_CHECK_EQUAL( 0, song1.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_comp.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_comp.amount.value );
+
+      share_type paulas_earnings = 0;
+      share_type priscillas_earnings = 0;
+      share_type suzies_earnings = 0;
+
+      // payouts of first song
+      price factor( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                    asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      share_type reward = (daily_content_reward * factor).amount * 2 / 5;
+      share_type platform_reward = reward * song1.playing_reward / MUSE_100_PERCENT;
+      share_type content_reward = reward - platform_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of second song
+      factor = price( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 2 / 5;
+      platform_reward = reward * song2.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of third song
+      factor = price( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 1 / 5;
+      platform_reward = reward * song3.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      priscillas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      BOOST_CHECK_EQUAL( paulas_earnings.value, paula_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( priscillas_earnings.value, priscilla_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 400000 + suzies_earnings.value, suzy_id(db).vesting_shares.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, suzy_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, uhura_id(db).balance.amount.value );
+      //BOOST_CHECK_EQUAL( 0, paula_id(db).balance.amount.value );
+      //BOOST_CHECK_EQUAL( 0, priscilla_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, martha_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, colette_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, cora_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, coreen_id(db).balance.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, suzy_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, uhura_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, paula_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, priscilla_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, martha_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, colette_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, cora_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, coreen_id(db).mbd_balance.amount.value );
+
+      //BOOST_CHECK_EQUAL( 100000, suzy_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, uhura_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, paula_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, priscilla_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, martha_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, colette_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, cora_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, coreen_id(db).vesting_shares.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, colette_id(db).total_listening_time );
+      BOOST_CHECK_EQUAL( 0, cora_id(db).total_listening_time );
+      BOOST_CHECK_EQUAL( 0, coreen_id(db).total_listening_time );
+
+      BOOST_CHECK_EQUAL( 0, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 0, dgpo.total_listening_time );
+   }
+
+   validate_database();
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( anon_user_test )
+{ try {
+
+   initialize_clean( 5 );
+
+   BOOST_CHECK( db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+
+   ACTORS( (suzy)(uhura)(paula)(priscilla)(martha) );
+
+   generate_block();
+
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // --------- Create streaming platforms ------------
+   {
+      trx.operations.clear();
+      fund( "suzy",      MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE + 300 );
+      vest( "suzy", 300 );
+      streaming_platform_update_operation spuo;
+      spuo.fee = asset( MUSE_MIN_STREAMING_PLATFORM_CREATION_FEE, MUSE_SYMBOL );
+      spuo.owner = "suzy";
+      spuo.url = "http://www.google.de";
+      trx.operations.push_back( spuo );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   // --------- Create content ------------
+   {
+      content_operation cop;
+      cop.uploader = "uhura";
+      cop.url = "ipfs://abcdef1";
+      cop.album_meta.album_title = "First test song";
+      cop.track_meta.track_title = "First test song";
+      cop.comp_meta.third_party_publishers = false;
+      distribution dist;
+      dist.payee = "paula";
+      dist.bp = MUSE_100_PERCENT;
+      cop.distributions.push_back( dist );
+      management_vote mgmt;
+      mgmt.voter = "martha";
+      mgmt.percentage = 100;
+      cop.management.push_back( mgmt );
+      cop.management_threshold = 100;
+      cop.playing_reward = 10;
+      cop.publishers_share = 0;
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef2";
+      cop.playing_reward = 11;
+      cop.publishers_share = 1;
+      trx.operations.push_back( cop );
+
+      cop.url = "ipfs://abcdef3";
+      cop.distributions.begin()->payee = "priscilla";
+      trx.operations.push_back( cop );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+   }
+
+   // --------- Publish playtime ------------
+   {
+      streaming_platform_report_operation spro;
+      spro.streaming_platform = "suzy";
+      spro.consumer = "";
+      spro.content = "ipfs://abcdef1";
+      spro.play_time = 7200;
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef2";
+      spro.ext.value.sp_user_id = 1;
+      spro.play_time = 3600;
+      trx.operations.push_back( spro );
+
+      spro.content = "ipfs://abcdef3";
+      spro.ext.value.sp_user_id = 2;
+      spro.play_time = 1800;
+      trx.operations.push_back( spro );
+      db.push_transaction( trx, database::skip_transaction_signatures  );
+      trx.operations.clear();
+
+      BOOST_CHECK_EQUAL( 2, db.get_index_type<streaming_platform_user_index>().indices().get<by_id>().size() );
+   }
+
+   const auto& played_at = db.head_block_time();
+
+   BOOST_REQUIRE( played_at + 86400 - MUSE_BLOCK_INTERVAL > db.head_block_time() );
+   generate_blocks( played_at + 86400 - MUSE_BLOCK_INTERVAL );
+
+   BOOST_CHECK_EQUAL( 0, suzy_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, uhura_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, paula_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, priscilla_id(db).balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, martha_id(db).balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 0, suzy_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, uhura_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, paula_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, priscilla_id(db).mbd_balance.amount.value );
+   BOOST_CHECK_EQUAL( 0, martha_id(db).mbd_balance.amount.value );
+
+   BOOST_CHECK_EQUAL( 400000, suzy_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, uhura_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, paula_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, priscilla_id(db).vesting_shares.amount.value );
+   BOOST_CHECK_EQUAL( 100000, martha_id(db).vesting_shares.amount.value );
+
+   const auto& dgpo = db.get_dynamic_global_properties();
+   share_type total_vested = dgpo.total_vested_by_platforms;
+   asset daily_content_reward = db.get_content_reward();
+
+   generate_block();
+
+   BOOST_CHECK( db.get_index_type<streaming_platform_user_index>().indices().empty() );
+
+   {
+      const content_object& song1 = db.get_content( "ipfs://abcdef1" );
+      const content_object& song2 = db.get_content( "ipfs://abcdef2" );
+      const content_object& song3 = db.get_content( "ipfs://abcdef3" );
+      BOOST_CHECK_EQUAL( 0, song1.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_master.amount.value );
+      BOOST_CHECK_EQUAL( 0, song2.accumulated_balance_comp.amount.value );
+      BOOST_CHECK_EQUAL( 0, song3.accumulated_balance_comp.amount.value );
+
+      share_type paulas_earnings = 0;
+      share_type priscillas_earnings = 0;
+      share_type suzies_earnings = 0;
+
+      // payouts of first song
+      price factor( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                    asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      share_type reward = (daily_content_reward * factor).amount * 2 / 5;
+      share_type platform_reward = reward * song1.playing_reward / MUSE_100_PERCENT;
+      share_type content_reward = reward - platform_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of second song
+      factor = price( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 2 / 5;
+      platform_reward = reward * song2.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      paulas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      // payouts of third song
+      factor = price( asset( total_vested + suzies_earnings, daily_content_reward.asset_id ),
+                      asset( 400000 + suzies_earnings, daily_content_reward.asset_id ) );
+      reward = (daily_content_reward * factor).amount * 1 / 5;
+      platform_reward = reward * song3.playing_reward / MUSE_100_PERCENT;
+      content_reward = reward - platform_reward;
+      priscillas_earnings += content_reward;
+      suzies_earnings += ( asset( platform_reward, daily_content_reward.asset_id ) * dgpo.get_vesting_share_price() ).amount;
+
+      BOOST_CHECK_EQUAL( paulas_earnings.value, paula_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( priscillas_earnings.value, priscilla_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 400000 + suzies_earnings.value, suzy_id(db).vesting_shares.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, suzy_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, uhura_id(db).balance.amount.value );
+      //BOOST_CHECK_EQUAL( 0, paula_id(db).balance.amount.value );
+      //BOOST_CHECK_EQUAL( 0, priscilla_id(db).balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, martha_id(db).balance.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, suzy_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, uhura_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, paula_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, priscilla_id(db).mbd_balance.amount.value );
+      BOOST_CHECK_EQUAL( 0, martha_id(db).mbd_balance.amount.value );
+
+      //BOOST_CHECK_EQUAL( 100000, suzy_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, uhura_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, paula_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, priscilla_id(db).vesting_shares.amount.value );
+      BOOST_CHECK_EQUAL( 100000, martha_id(db).vesting_shares.amount.value );
+
+      BOOST_CHECK_EQUAL( 0, dgpo.active_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_time_users );
+      BOOST_CHECK_EQUAL( 0, dgpo.full_users_time );
+      BOOST_CHECK_EQUAL( 0, dgpo.total_listening_time );
+   }
+
+   validate_database();
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()
