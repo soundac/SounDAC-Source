@@ -3423,6 +3423,12 @@ void database::adjust_supply( const asset& delta, bool adjust_vesting )
    } );
 }
 
+const asset_object& database::get_asset(const std::string& symbol)const {
+   auto& index = get_index_type<asset_index>().indices().get<by_symbol>();
+   auto itr = index.find(symbol);
+   FC_ASSERT(itr != index.end(), "Asset '${s}' not found", ("s",symbol));
+   return *itr;
+}
 
 asset database::get_balance( const account_object& a, asset_id_type symbol )const
 {
