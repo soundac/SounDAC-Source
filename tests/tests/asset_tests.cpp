@@ -37,19 +37,19 @@ BOOST_FIXTURE_TEST_SUITE(asset_tests, clean_database_fixture)
 
 BOOST_AUTO_TEST_CASE(create_asset_test)
 { try {
-    ACTORS((alice)(bob));
+    ACTORS((bob)(federation));
 
     trx.clear();
     trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
 
     {
         asset_create_operation aco;
-        aco.issuer = "alice";
+        aco.issuer = "federation";
         aco.symbol = "BTS";
         aco.precision = 5;
         aco.common_options.description = "IOU for BitShares core token";
         trx.operations.emplace_back(std::move(aco));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(create_asset_test)
     BOOST_CHECK_EQUAL(0, bts.current_supply.value);
     BOOST_CHECK_EQUAL("BTS", bts.symbol_string);
     BOOST_CHECK_EQUAL(5, bts.precision);
-    BOOST_CHECK(alice_id == bts.issuer);
+    BOOST_CHECK(federation_id == bts.issuer);
 
     {
         asset_issue_operation aio;
@@ -70,24 +70,24 @@ BOOST_AUTO_TEST_CASE(create_asset_test)
         BOOST_CHECK_THROW(PUSH_TX(db, trx), fc::assert_exception);
         trx.clear();
 
-        aio.issuer = "alice";
+        aio.issuer = "federation";
         aio.asset_to_issue = bts.amount(100);
-        aio.issue_to_account = "alice";
+        aio.issue_to_account = "federation";
         trx.operations.emplace_back(std::move(aio));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
 
-        aio.issuer = "alice";
+        aio.issuer = "federation";
         aio.asset_to_issue = bts.amount(50);
         aio.issue_to_account = "bob";
         trx.operations.emplace_back(std::move(aio));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
 
-    asset amount = db.get_balance("alice", bts.id);
+    asset amount = db.get_balance("federation", bts.id);
     BOOST_CHECK(bts.id == amount.asset_id);
     BOOST_CHECK_EQUAL(100, amount.amount.value);
     amount = db.get_balance("bob", bts.id);
@@ -96,16 +96,16 @@ BOOST_AUTO_TEST_CASE(create_asset_test)
 
     {
         transfer_operation top;
-        top.from = "alice";
+        top.from = "federation";
         top.to = "bob";
         top.amount = bts.amount(10);
         trx.operations.emplace_back(std::move(top));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
 
-    amount = db.get_balance("alice", bts.id);
+    amount = db.get_balance("federation", bts.id);
     BOOST_CHECK(bts.id == amount.asset_id);
     BOOST_CHECK_EQUAL(90, amount.amount.value);
     amount = db.get_balance("bob", bts.id);
@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_CASE(create_asset_test)
 
 BOOST_AUTO_TEST_CASE(trade_asset_test)
 { try {
-    ACTORS((alice)(bob));
+    ACTORS((bob)(federation));
     fund("bob");
     
     // give bob some fake MBD
@@ -135,12 +135,12 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
 
     {
         asset_create_operation aco;
-        aco.issuer = "alice";
+        aco.issuer = "federation";
         aco.symbol = "BTS";
         aco.precision = 5;
         aco.common_options.description = "IOU for BitShares core token";
         trx.operations.emplace_back(std::move(aco));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
@@ -148,27 +148,27 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
     const asset_object& bts = db.get_asset("BTS");
     {
         asset_issue_operation aio;
-        aio.issuer = "alice";
+        aio.issuer = "federation";
         aio.asset_to_issue = bts.amount(500000);
-        aio.issue_to_account = "alice";
+        aio.issue_to_account = "federation";
         trx.operations.emplace_back(std::move(aio));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
 
     {
         limit_order_create_operation loc;
-        loc.owner = "alice";
+        loc.owner = "federation";
         loc.amount_to_sell = bts.amount(100000);
         loc.min_to_receive = MBD_SYMBOL(db).amount(100000);
         trx.operations.emplace_back(std::move(loc));
-        sign(trx, alice_private_key);
+        sign(trx, federation_private_key);
         PUSH_TX(db, trx);
         trx.clear();
     }
 
-    asset amount = db.get_balance("alice", bts.id);
+    asset amount = db.get_balance("federation", bts.id);
     BOOST_CHECK(bts.id == amount.asset_id);
     BOOST_CHECK_EQUAL(400000, amount.amount.value);
 
@@ -186,9 +186,56 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
     amount = db.get_balance("bob", bts.id);
     BOOST_CHECK(bts.id == amount.asset_id);
     BOOST_CHECK_EQUAL(100000, amount.amount.value);
-    amount = db.get_balance("alice", MBD_SYMBOL);
+    amount = db.get_balance("federation", MBD_SYMBOL);
     BOOST_CHECK(MBD_SYMBOL == amount.asset_id);
     BOOST_CHECK_EQUAL(100000, amount.amount.value);
+} FC_LOG_AND_RETHROW() }
+
+BOOST_FIXTURE_TEST_CASE( hardfork_test, database_fixture )
+{ try {
+
+   initialize_clean( 5 );
+
+   ACTORS( (alice)(federation) );
+   account_create( "federation.asset", federation_public_key );
+
+   // Alice can create assets before HF 0.6
+   asset_create_operation aco;
+   aco.issuer = "alice";
+   aco.symbol = "BTS";
+   aco.precision = 5;
+   aco.common_options.description = "IOU for BitShares core token";
+   trx.operations.emplace_back(aco);
+   sign(trx, alice_private_key);
+   PUSH_TX(db, trx);
+   trx.clear();
+
+   generate_blocks( 2*MUSE_MAX_MINERS );
+   generate_blocks( fc::time_point_sec( MUSE_HARDFORK_0_6_TIME + MUSE_BLOCK_INTERVAL ), true );
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // ...but can't after
+   aco.symbol = "BTC";
+   trx.operations.emplace_back(aco);
+   sign(trx, alice_private_key);
+   BOOST_CHECK_THROW( PUSH_TX(db, trx), fc::assert_exception );
+   trx.clear();
+
+   // ...but federation can
+   aco.issuer = "federation";
+   trx.operations.emplace_back(aco);
+   sign(trx, federation_private_key);
+   PUSH_TX(db, trx);
+   trx.clear();
+
+   // ...and federation.asset can
+   aco.issuer = "federation.asset";
+   aco.symbol = "ETH";
+   trx.operations.emplace_back(aco);
+   sign(trx, federation_private_key);
+   PUSH_TX(db, trx);
+   trx.clear();
+
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()

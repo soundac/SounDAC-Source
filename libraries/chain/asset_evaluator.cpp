@@ -41,11 +41,14 @@ bool _is_authorized_asset( const database& d, const account_object& acct, const 
 
 void asset_create_evaluator::do_apply( const asset_create_operation& op )
 { try {
-   //TODO_MUSE - add fee
    auto& asset_indx = db().get_index_type<asset_index>().indices().get<by_symbol>();
    auto asset_symbol_itr = asset_indx.find( op.symbol );
    FC_ASSERT( asset_symbol_itr == asset_indx.end(), "Asset with symbol ${s} already exist", ("s",op.symbol) );
-  
+
+   if( db().has_hardfork(MUSE_HARDFORK_0_6) )
+      FC_ASSERT( "federation" == op.issuer || "federation.asset" == op.issuer,
+                 "Only 'federation' and 'federation.asset' accounts can create assets!" );
+
    account_object issuer=db().get_account(op.issuer);
    auto dotpos = op.symbol.rfind( '.' );
    if( dotpos != std::string::npos )
