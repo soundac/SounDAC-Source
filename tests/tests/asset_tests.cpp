@@ -235,7 +235,49 @@ BOOST_FIXTURE_TEST_CASE( hardfork_test, database_fixture )
    sign(trx, federation_private_key);
    PUSH_TX(db, trx);
    trx.clear();
+} FC_LOG_AND_RETHROW() }
 
+BOOST_FIXTURE_TEST_CASE( softfork_test, database_fixture )
+{ try {
+
+   initialize_clean( 5 );
+
+   ACTORS( (alice)(federation) );
+   account_create( "federation.asset", federation_public_key );
+
+   // Alice can create assets before HF 0.6
+   asset_create_operation aco;
+   aco.issuer = "alice";
+   aco.symbol = "BTS";
+   aco.precision = 5;
+   aco.common_options.description = "IOU for BitShares core token";
+   trx.operations.emplace_back(aco);
+   sign(trx, alice_private_key);
+   PUSH_TX(db, trx);
+   trx.clear();
+
+   // ...but it's not included in a block
+   generate_block();
+   BOOST_CHECK_THROW( db.get_asset("BTS"), fc::assert_exception );
+
+   generate_blocks( fc::time_point::now() - fc::seconds(25) );
+
+   // A block containing it within the softfork window cannot be applied
+   auto block = generate_block();
+   BOOST_CHECK( fc::time_point::now() - fc::seconds(30) < fc::time_point(db.head_block_time()) );
+   db.pop_block();
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+   trx.operations.emplace_back( aco );
+   sign( trx, alice_private_key );
+   block.transactions.emplace_back( trx );
+   block.transaction_merkle_root = block.calculate_merkle_root();
+   block.sign( init_account_priv_key );
+   BOOST_CHECK_THROW( db.push_block(block), fc::assert_exception );
+
+   // ...but after the window has passed, it can
+   if( block.timestamp + fc::seconds(31) > fc::time_point::now() )
+      fc::usleep( block.timestamp + fc::seconds(31) - fc::time_point::now() );
+   db.push_block(block);
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()

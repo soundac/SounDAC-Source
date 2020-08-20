@@ -779,6 +779,30 @@ signed_block database::generate_block(
    return result;
 }
 
+class soft_fork_checker {
+public:
+   using result_type = void;
+
+   template<typename Op>
+   void operator()( const Op& op )const {}
+
+   void operator()( const muse::chain::proposal_create_operation& v )const {
+      for( const op_wrapper &op : v.proposed_ops )
+         op.op.visit( *this );
+   }
+
+   void operator()( const asset_create_operation& op )const {
+      FC_ASSERT( "federation" == op.issuer || "federation.asset" == op.issuer,
+                 "Only 'federation' and 'federation.asset' accounts can create assets!" );
+   }
+};
+
+static void check_soft_fork( const transaction& tx ) {
+   static soft_fork_checker vtor;
+
+   for( const auto& op : tx.operations )
+      op.visit( vtor );
+}
 
 signed_block database::_generate_block(
    fc::time_point_sec when,
@@ -860,6 +884,8 @@ signed_block database::_generate_block(
 
       try
       {
+         if( !has_hardfork( MUSE_HARDFORK_0_6 ) ) check_soft_fork( tx );
+
          auto temp_session = _undo_db.start_undo_session();
          _apply_transaction( tx );
          temp_session.merge();
@@ -2665,6 +2691,8 @@ void database::_apply_block( const signed_block& next_block )
    FC_ASSERT( get_witness( next_block.witness ).running_version >= hardfork_property_id_type()( *this ).current_hardfork_version,
          "Block produced by witness that is not running current hardfork" );
 
+   bool soft_fork = !has_hardfork( MUSE_HARDFORK_0_6 )
+                    && next_block.timestamp >= fc::time_point::now() - fc::seconds(30);
    for( const auto& trx : next_block.transactions )
    {
       /* We do not need to push the undo state for each transaction
@@ -2673,6 +2701,7 @@ void database::_apply_block( const signed_block& next_block )
        * for transactions when validating broadcast transactions or
        * when building a block.
        */
+      if( soft_fork ) check_soft_fork( trx );
       apply_transaction( trx, skip );
       ++_current_trx_in_block;
    }
