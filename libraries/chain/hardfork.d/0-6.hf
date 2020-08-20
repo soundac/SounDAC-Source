@@ -1,0 +1,6 @@
+#ifndef MUSE_HARDFORK_0_6
+#define MUSE_HARDFORK_0_6 6
+// Mainnet hardfork: TBD
+#define MUSE_HARDFORK_0_6_TIME 1700000000
+#define MUSE_HARDFORK_0_6_VERSION hardfork_version( 0, 6 )
+#endif
