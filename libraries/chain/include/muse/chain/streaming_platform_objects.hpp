@@ -225,10 +225,13 @@ FC_REFLECT_DERIVED( muse::chain::stream_report_request_object, (graphene::db::ob
 FC_REFLECT_DERIVED( muse::chain::report_object, (graphene::db::object), 
                     (streaming_platform)
                     (consumer)
+                    (sp_user_id)
                     (content)
                     (created)
                     (play_time)
                     (playlist_creator)
+                    (spinning_platform)
+                    (reward_pct)
                   )
 
 FC_REFLECT_DERIVED( muse::chain::streaming_platform_user_object, (graphene::db::object),

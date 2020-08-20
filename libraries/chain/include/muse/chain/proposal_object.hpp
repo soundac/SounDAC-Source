@@ -109,4 +109,4 @@ FC_REFLECT_DERIVED( muse::chain::proposal_object, (muse::chain::object),
                     (expiration_time)(review_period_time)(proposed_transaction)(required_active_approvals)
                     (available_active_approvals)(required_owner_approvals)(available_owner_approvals)
                     (required_basic_approvals)(available_basic_approvals)(required_master_content_approvals)
-                    (required_comp_content_approvals)(available_key_approvals) )
+                    (required_comp_content_approvals)(available_key_approvals)(can_veto) )

@@ -474,6 +474,9 @@ namespace muse { namespace chain {
    typedef generic_index< account_balance_object, account_balance_object_multi_index_type >  account_balance_index;
 
 }}
+
+FC_REFLECT( muse::chain::account_object::redelegation, (redelegate_pct)(redelegated) )
+
 FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (name)(owner)(active)(basic)(memo_key)(json_metadata)(proxy)(last_owner_update)
                     (created)(total_listening_time)(total_time_by_platform)
@@ -482,6 +485,7 @@ FC_REFLECT_DERIVED( muse::chain::account_object, (graphene::db::object),
                     (balance)
                     (mbd_balance)(mbd_seconds)(mbd_seconds_last_update)(mbd_last_interest_payment)
                     (vesting_shares)(delegated_vesting_shares)(received_vesting_shares)
+                    (redelegations)(redelegated_vesting_shares)(rereceived_vesting_shares)
                     (vesting_withdraw_rate)(next_vesting_withdrawal)(withdrawn)(to_withdraw)(withdraw_routes)
                     (score)
                     (proxied_vsf_votes)(witnesses_voted_for)(streaming_platforms_voted_for)
