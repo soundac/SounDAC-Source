@@ -556,6 +556,9 @@ void feed_publish_evaluator::do_apply( const feed_publish_operation& o )
 
 void convert_evaluator::do_apply( const convert_operation& o )
 {
+  if( o.amount.asset_id == MUSE_SYMBOL )
+     FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_6 ), "XSD -> xUSD conversion only allowed after hardfork 6!" );
+
   const auto& owner = db().get_account( o.owner );
   FC_ASSERT( db().get_balance( owner, o.amount.asset_id ) >= o.amount );
 
@@ -564,13 +567,31 @@ void convert_evaluator::do_apply( const convert_operation& o )
   const auto& fhistory = db().get_feed_history();
   FC_ASSERT( !fhistory.current_median_history.is_null() );
 
-  db().create<convert_request_object>( [&]( convert_request_object& obj )
+  if( o.amount.asset_id == MUSE_SYMBOL )
   {
-      obj.owner           = o.owner;
-      obj.requestid       = o.requestid;
-      obj.amount          = o.amount;
-      obj.conversion_date = db().head_block_time() + MUSE_CONVERSION_DELAY; // 1 week
-  });
+     const asset amount_to_issue = o.amount * fhistory.current_median_history;
+
+     db().adjust_balance( owner, amount_to_issue );
+
+     db().push_applied_operation( fill_convert_request_operation ( o.owner, o.requestid, o.amount, amount_to_issue ) );
+
+     db().modify( db().get_dynamic_global_properties(),
+                  [&o,&amount_to_issue,&fhistory]( dynamic_global_property_object& p )
+     {
+        p.current_supply -= o.amount;
+        p.current_mbd_supply += amount_to_issue;
+        p.virtual_supply -= o.amount;
+        p.virtual_supply += amount_to_issue * fhistory.current_median_history;
+     } );
+  }
+  else
+     db().create<convert_request_object>( [&]( convert_request_object& obj )
+     {
+        obj.owner           = o.owner;
+        obj.requestid       = o.requestid;
+        obj.amount          = o.amount;
+        obj.conversion_date = db().head_block_time() + MUSE_CONVERSION_DELAY; // 1 week
+     });
 
 }
 
