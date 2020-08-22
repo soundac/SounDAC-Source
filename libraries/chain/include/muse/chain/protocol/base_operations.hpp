@@ -749,6 +749,6 @@ FC_REFLECT( muse::chain::request_account_recovery_operation, (recovery_account)(
 FC_REFLECT( muse::chain::recover_account_operation, (account_to_recover)(new_owner_authority)(recent_owner_authority)(extensions) );
 FC_REFLECT( muse::chain::change_recovery_account_operation, (account_to_recover)(new_recovery_account)(extensions) );
 FC_REFLECT( muse::chain::delegate_vesting_shares_operation, (delegator)(delegatee)(vesting_shares)
-                                                            (extensions) // FIXME: not on testnet
+                                                           // (extensions) // FIXME: not on testnet
           );
 FC_REFLECT( muse::chain::return_vesting_delegation_operation, (account)(vesting_shares) )
