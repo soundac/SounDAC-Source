@@ -260,6 +260,7 @@ BOOST_FIXTURE_TEST_CASE( softfork_test, database_fixture )
    generate_block();
    BOOST_CHECK_THROW( db.get_asset("BTS"), fc::assert_exception );
 
+   generate_blocks( fc::time_point::now() - fc::minutes(1) );
    generate_blocks( fc::time_point::now() - fc::seconds(25) );
 
    // A block containing it within the softfork window cannot be applied
