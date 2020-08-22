@@ -82,15 +82,15 @@ struct genesis_state_type {
 
    time_point_sec                           initial_timestamp;
    share_type                               max_core_supply = MUSE_MAX_SHARE_SUPPLY;
-   share_type                               init_supply = 0;
+   share_type                               init_supply = 0; // not reflected, only used in tests
    vector<initial_account_type>             initial_accounts;
    vector<initial_asset_type>               initial_assets;
    vector<initial_balance_type>             initial_balances;
    vector<initial_vesting_balance_type>     initial_vesting_balances;
    uint64_t                                 initial_active_witnesses = 1;
    vector<initial_witness_type>             initial_witness_candidates;
-   chain_id_type                            initial_chain_id;
-   fc::sha256                               json_hash;
+   chain_id_type                            initial_chain_id; // not reflected, computed from file
+   fc::sha256                               json_hash; // not reflected, computed from file
    /**
     * Get the chain_id corresponding to this genesis state.
     *

@@ -44,6 +44,12 @@ namespace impl {
          template<typename T>
          void operator()( const T& v )const { /* do nothing by default */ }
 
+         void operator()( const muse::chain::convert_operation& o )const {
+            if( o.amount.asset_id == MUSE_SYMBOL )
+               FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_6 ),
+                          "XSD -> xUSD conversion only allowed after hardfork 6!" );
+         }
+
          void operator()( const muse::chain::witness_update_operation& o )const {
             if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to validate after HF
                FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );

@@ -938,6 +938,48 @@ BOOST_FIXTURE_TEST_CASE( hardfork_test, database_fixture )
       BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
       BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_3 ) );
       BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_4 ) );
+      BOOST_REQUIRE( !db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+
+      generate_blocks( 2*MUSE_MAX_MINERS );
+      generate_blocks( fc::time_point_sec( MUSE_HARDFORK_0_5_TIME - MUSE_BLOCK_INTERVAL ), true );
+
+      BOOST_REQUIRE( db.has_hardfork( 0 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_3 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_4 ) );
+      BOOST_REQUIRE( !db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+
+      generate_block();
+
+      BOOST_REQUIRE( db.has_hardfork( 0 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_3 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_4 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+      BOOST_REQUIRE( !db.has_hardfork( MUSE_HARDFORK_0_6 ) );
+
+      generate_blocks( 2*MUSE_MAX_MINERS );
+      generate_blocks( fc::time_point_sec( MUSE_HARDFORK_0_6_TIME - MUSE_BLOCK_INTERVAL ), true );
+
+      BOOST_REQUIRE( db.has_hardfork( 0 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_3 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_4 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+      BOOST_REQUIRE( !db.has_hardfork( MUSE_HARDFORK_0_6 ) );
+
+      generate_block();
+
+      BOOST_REQUIRE( db.has_hardfork( 0 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_1 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_2 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_3 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_4 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_5 ) );
+      BOOST_REQUIRE( db.has_hardfork( MUSE_HARDFORK_0_6 ) );
    }
    FC_LOG_AND_RETHROW()
 }
