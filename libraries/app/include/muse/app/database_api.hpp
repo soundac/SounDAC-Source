@@ -531,7 +531,7 @@ class database_api
 } }
 
 FC_REFLECT( muse::app::order, (order_price)(real_price)(base)(quote)(created) );
-FC_REFLECT( muse::app::order_book, (asks)(bids) );
+FC_REFLECT( muse::app::order_book, (base)(quote)(asks)(bids) );
 FC_REFLECT( muse::app::scheduled_hardfork, (hf_version)(live_time) );
 FC_REFLECT( muse::app::liquidity_balance, (account)(weight) );
 

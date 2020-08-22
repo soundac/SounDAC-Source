@@ -190,7 +190,11 @@ namespace muse { namespace chain {
       FC_ASSERT( is_valid_account_name( owner ) );
       /// only allow conversion from MBD to MUSE, allowing the opposite can enable traders to abuse
       /// market fluxuations through converting large quantities without moving the price.
-      FC_ASSERT( is_asset_type( amount, MBD_SYMBOL ) );
+      if( is_asset_type( amount, MUSE_SYMBOL ) )
+         FC_ASSERT( "federation" == owner || "federation.asset" == owner,
+                    "Only federation and federation.asset accounts can convert XSD -> xUSD!" );
+      else
+         FC_ASSERT( is_asset_type( amount, MBD_SYMBOL ) );
       FC_ASSERT( amount.amount > 0 );
    }
 

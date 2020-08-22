@@ -418,7 +418,7 @@ FC_REFLECT( muse::chain::unfriend_operation, (who)(whom) )
 FC_REFLECT( muse::chain::content_reward_operation, (payee)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::curate_reward_operation, (curator)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::playing_reward_operation, (platform)(url)(mbd_payout)(vesting_payout) )
-FC_REFLECT( muse::chain::streaming_platform_report_operation::report_extensions, (spinning_platform) )
+FC_REFLECT( muse::chain::streaming_platform_report_operation::report_extensions, (spinning_platform)(sp_user_id) )
 FC_REFLECT( muse::chain::streaming_platform_report_operation,
             (streaming_platform)(consumer)(content)(playlist_creator)(play_time)(dummy1)(dummy2)(ext) )
 FC_REFLECT( muse::chain::account_streaming_platform_vote_operation, (account)(streaming_platform)(approve))
