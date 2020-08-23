@@ -1,0 +1,6 @@
+#ifndef MUSE_HARDFORK_0_6
+#define MUSE_HARDFORK_0_6 6
+// Testnet hardfork: 2020-08-24T13:00Z
+#define MUSE_HARDFORK_0_6_TIME 1598274000
+#define MUSE_HARDFORK_0_6_VERSION hardfork_version( 0, 6 )
+#endif

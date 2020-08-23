@@ -214,12 +214,13 @@ namespace muse { namespace chain {
 } } // muse::chain
 
 FC_REFLECT_DERIVED( muse::chain::content_object, (graphene::db::object),
-                    (album_meta)(track_meta)(comp_meta)
+                    (album_meta)(track_meta)(comp_meta)(track_title)
                     (uploader)(url)(accumulated_balance_master)(accumulated_balance_comp)
                     (last_update)(created)(last_played)(times_played)(times_played_24)
                     (allow_votes)(playing_reward) (publishers_share)
                     (manage_master)(manage_comp)(distributions_master)(distributions_comp)
                     (curation_rewards)(curation_reward_expiration)
+                    (disabled)
                     )
 
 FC_REFLECT_DERIVED( muse::chain::content_approve_object, (graphene::db::object),

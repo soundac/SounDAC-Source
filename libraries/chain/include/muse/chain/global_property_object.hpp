@@ -152,6 +152,7 @@ FC_REFLECT_DERIVED( muse::chain::dynamic_global_property_object, (graphene::db::
                     (total_vesting_shares)
                     (total_reward_fund_muse)
                     (supply_delta)
+                    (maximum_proposal_lifetime)
                     (mbd_interest_rate)
                     (average_block_size)
                     (maximum_block_size)
