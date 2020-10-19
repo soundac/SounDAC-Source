@@ -2819,15 +2819,36 @@ try {
       auto median_feed = feeds[feeds.size()/2];
 
       modify( get_feed_history(), [&]( feed_history_object& fho ){
-           fho.price_history.push_back( median_feed );
-           if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
-               fho.price_history.pop_front();
+         fho.price_history.push_back( median_feed );
+         if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
+             fho.price_history.pop_front();
 
-           if( fho.price_history.size() ) {
-              std::deque<price> copy = fho.price_history;
-              std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
-              fho.current_median_history = copy[copy.size()/2];
-           }
+         if( fho.price_history.size() ) {
+            std::deque<price> copy = fho.price_history;
+            std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
+            fho.current_median_history = copy[copy.size()/2];
+
+            if( has_hardfork( MUSE_HARDFORK_0_6 ) )
+            {
+               // This block limits the effective median price to force MBD to remain at or
+               // below 5% of the combined market cap of MUSE and MBD.
+               //
+               // For example, if we have 500 MUSE and 100 MBD, the price is limited to
+               // 1900 MBD / 500 MUSE which works out to be $3.80.  At this price, 500 MUSE
+               // would be valued at 500 * $3.80 = $1900.  100 MBD is by definition always $100,
+               // so the combined market cap is $1900 + $100 = $2000.
+
+               const auto& gpo = get_dynamic_global_properties();
+
+               if( gpo.current_mbd_supply.amount > 0 )
+               {
+                  price min_price( asset( 9 * gpo.current_mbd_supply.amount, MBD_SYMBOL ), gpo.current_supply );
+
+                  if( min_price > fho.current_median_history )
+                     fho.current_median_history = min_price;
+               }
+            }
+         }
       });
    }
 } FC_CAPTURE_AND_RETHROW() }
