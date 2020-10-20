@@ -272,10 +272,6 @@ feed_history_object database_api::get_feed_history()const {
    return my->_db.get_feed_history();
 }
 
-price database_api::get_current_median_history_price()const {
-   return my->_db.get_feed_history().current_median_history;
-}
-
 dynamic_global_property_object database_api_impl::get_dynamic_global_properties()const
 {
    return _db.get(dynamic_global_property_id_type());

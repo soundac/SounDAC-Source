@@ -5,7 +5,7 @@
 
 #define IS_TEST_NET
 
-#define MUSE_BLOCKCHAIN_VERSION              ( version(0, 6, 0) )
+#define MUSE_BLOCKCHAIN_VERSION              ( version(0, 6, 1) )
 #define MUSE_BLOCKCHAIN_HARDFORK_VERSION     ( hardfork_version( MUSE_BLOCKCHAIN_VERSION ) )
 
 #ifdef IS_TEST_NET // This is the muse test net mode. Some feature may behave differently
@@ -219,7 +219,7 @@
 #define MUSE_MAX_ASSET_WHITELIST_AUTHORITIES 10
 #define MUSE_MAX_URL_LENGTH                  127
 
-#define GRAPHENE_CURRENT_DB_VERSION          "MUSE_0_6_0"
+#define GRAPHENE_CURRENT_DB_VERSION          "MUSE_0_6_1"
 
 #define MUSE_IRREVERSIBLE_THRESHOLD          (51 * MUSE_1_PERCENT)
 
