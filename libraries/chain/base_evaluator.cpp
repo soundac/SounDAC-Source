@@ -565,11 +565,11 @@ void convert_evaluator::do_apply( const convert_operation& o )
   db().adjust_balance( owner, -o.amount );
 
   const auto& fhistory = db().get_feed_history();
-  FC_ASSERT( !fhistory.current_median_history.is_null() );
+  FC_ASSERT( !fhistory.effective_median_history.is_null() );
 
   if( o.amount.asset_id == MUSE_SYMBOL )
   {
-     const asset amount_to_issue = o.amount * fhistory.current_median_history;
+     const asset amount_to_issue = o.amount * fhistory.effective_median_history;
 
      db().adjust_balance( owner, amount_to_issue );
 
@@ -581,7 +581,7 @@ void convert_evaluator::do_apply( const convert_operation& o )
         p.current_supply -= o.amount;
         p.current_mbd_supply += amount_to_issue;
         p.virtual_supply -= o.amount;
-        p.virtual_supply += amount_to_issue * fhistory.current_median_history;
+        p.virtual_supply += amount_to_issue * fhistory.effective_median_history;
      } );
   }
   else

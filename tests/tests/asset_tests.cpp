@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
        gpo.current_mbd_supply.amount = share_type(500000);
     });
     db.modify( db.get_feed_history(), [] ( feed_history_object& fho ){
-       fho.current_median_history = asset(1) / asset(1, MBD_SYMBOL);
+       fho.effective_median_history = fho.current_median_history = asset(1) / asset(1, MBD_SYMBOL);
     });
 
     trx.clear();

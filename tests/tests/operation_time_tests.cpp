@@ -316,7 +316,8 @@ BOOST_AUTO_TEST_CASE( feed_publish_mean )
       BOOST_TEST_MESSAGE( "Get feed history object" );
       feed_history_object feed_history = db.get_feed_history();
       BOOST_TEST_MESSAGE( "Check state" );
-      BOOST_REQUIRE( feed_history.current_median_history == price( asset( 99000, MUSE_SYMBOL), asset( 1000, MBD_SYMBOL ) ) );
+      BOOST_REQUIRE( feed_history.actual_median_history == price( asset( 99000, MUSE_SYMBOL), asset( 1000, MBD_SYMBOL ) ) );
+      BOOST_REQUIRE( feed_history.effective_median_history == price( asset( 99000, MUSE_SYMBOL), asset( 1000, MBD_SYMBOL ) ) );
       BOOST_REQUIRE( feed_history.price_history[ 0 ] == price( asset( 99000, MUSE_SYMBOL), asset( 1000, MBD_SYMBOL ) ) );
       validate_database();
 
@@ -342,7 +343,8 @@ BOOST_AUTO_TEST_CASE( feed_publish_mean )
          BOOST_TEST_MESSAGE( "Check feed_history" );
 
          feed_history = feed_history_id_type()( db );
-         BOOST_REQUIRE( feed_history.current_median_history == feed_history.price_history[ ( i + 1 ) / 2 ] );
+         BOOST_REQUIRE( feed_history.actual_median_history == feed_history.price_history[ ( i + 1 ) / 2 ] );
+         BOOST_REQUIRE( feed_history.effective_median_history == feed_history.price_history[ ( i + 1 ) / 2 ] );
          BOOST_REQUIRE( feed_history.price_history[ i + 1 ] == ops[4].exchange_rate );
          validate_database();
       }
