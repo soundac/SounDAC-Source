@@ -1042,7 +1042,7 @@ asset database::create_mbd(const account_object &to_account, asset muse)
       if( muse.amount == 0 )
          return asset(0, MBD_SYMBOL);
 
-      const auto& median_price = get_feed_history().current_median_history;
+      const auto& median_price = get_feed_history().actual_median_history;
       if( !median_price.is_null() )
       {
          auto mbd = muse * median_price;
@@ -2166,7 +2166,7 @@ void database::process_conversions()
    auto itr = request_by_date.begin();
 
    const auto& fhistory = get_feed_history();
-   if( fhistory.current_median_history.is_null() )
+   if( fhistory.effective_median_history.is_null() )
       return;
 
    asset net_mbd( 0, MBD_SYMBOL );
@@ -2175,7 +2175,7 @@ void database::process_conversions()
    while( itr != request_by_date.end() && itr->conversion_date <= now )
    {
       const auto& user = get_account( itr->owner );
-      auto amount_to_issue = itr->amount * fhistory.current_median_history;
+      auto amount_to_issue = itr->amount * fhistory.effective_median_history;
 
       adjust_balance( user, amount_to_issue );
 
@@ -2194,7 +2194,7 @@ void database::process_conversions()
        p.current_supply += net_muse;
        p.current_mbd_supply -= net_mbd;
        p.virtual_supply += net_muse;
-       p.virtual_supply -= net_mbd * get_feed_history().current_median_history;
+       p.virtual_supply -= net_mbd * get_feed_history().effective_median_history;
    } );
 }
 
@@ -2202,20 +2202,20 @@ asset database::to_mbd( const asset& muse )const
 {
    FC_ASSERT( muse.asset_id == MUSE_SYMBOL );
    const auto& feed_history = get_feed_history();
-   if( feed_history.current_median_history.is_null() )
+   if( feed_history.actual_median_history.is_null() )
       return asset( 0, MBD_SYMBOL );
 
-   return muse * feed_history.current_median_history;
+   return muse * feed_history.actual_median_history;
 }
 
 asset database::to_muse(const asset &mbd)const
 {
    FC_ASSERT( mbd.asset_id == MBD_SYMBOL );
    const auto& feed_history = get_feed_history();
-   if( feed_history.current_median_history.is_null() )
+   if( feed_history.effective_median_history.is_null() )
       return asset( 0, MUSE_SYMBOL );
 
-   return mbd * feed_history.current_median_history;
+   return mbd * feed_history.effective_median_history;
 }
 
 void database::account_recovery_processing()
@@ -2819,15 +2819,36 @@ try {
       auto median_feed = feeds[feeds.size()/2];
 
       modify( get_feed_history(), [&]( feed_history_object& fho ){
-           fho.price_history.push_back( median_feed );
-           if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
-               fho.price_history.pop_front();
+         fho.price_history.push_back( median_feed );
+         if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
+             fho.price_history.pop_front();
 
-           if( fho.price_history.size() ) {
-              std::deque<price> copy = fho.price_history;
-              std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
-              fho.current_median_history = copy[copy.size()/2];
-           }
+         if( fho.price_history.size() ) {
+            std::deque<price> copy = fho.price_history;
+            std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
+            fho.effective_median_history = fho.actual_median_history = copy[copy.size()/2];
+
+            if( has_hardfork( MUSE_HARDFORK_0_6 ) )
+            {
+               // This block limits the effective median price to force MBD to remain at or
+               // below 5% of the combined market cap of MUSE and MBD.
+               //
+               // For example, if we have 500 MUSE and 100 MBD, the price is limited to
+               // 1900 MBD / 500 MUSE which works out to be $3.80.  At this price, 500 MUSE
+               // would be valued at 500 * $3.80 = $1900.  100 MBD is by definition always $100,
+               // so the combined market cap is $1900 + $100 = $2000.
+
+               const auto& gpo = get_dynamic_global_properties();
+
+               if( gpo.current_mbd_supply.amount > 0 )
+               {
+                  price min_price( asset( 9 * gpo.current_mbd_supply.amount, MBD_SYMBOL ), gpo.current_supply );
+
+                  if( min_price > fho.effective_median_history )
+                     fho.effective_median_history = min_price;
+               }
+            }
+         }
       });
    }
 } FC_CAPTURE_AND_RETHROW() }
@@ -3065,7 +3086,8 @@ void database::update_virtual_supply()
    modify( get_dynamic_global_properties(), [&]( dynamic_global_property_object& dgp )
    {
       dgp.virtual_supply = dgp.current_supply
-         + ( get_feed_history().current_median_history.is_null() ? asset( 0, MUSE_SYMBOL ) : dgp.current_mbd_supply * get_feed_history().current_median_history );
+         + ( get_feed_history().effective_median_history.is_null() ? asset( 0, MUSE_SYMBOL )
+                : dgp.current_mbd_supply * get_feed_history().effective_median_history );
    });
 }
 
@@ -3394,7 +3416,7 @@ void database::adjust_balance( const account_object& a, const asset& delta )
                   modify( get_dynamic_global_properties(), [&]( dynamic_global_property_object& props)
                   {
                      props.current_mbd_supply += interest_paid;
-                     props.virtual_supply += interest_paid * get_feed_history().current_median_history;
+                     props.virtual_supply += interest_paid * get_feed_history().effective_median_history;
                   } );
                }
             }
@@ -3445,7 +3467,7 @@ void database::adjust_supply( const asset& delta, bool adjust_vesting )
          assert( props.current_supply.amount.value >= 0 );
       }else if (delta.asset_id == MBD_SYMBOL){
          props.current_mbd_supply += delta;
-         props.virtual_supply = props.current_mbd_supply * get_feed_history().current_median_history + props.current_supply;
+         props.virtual_supply = props.current_mbd_supply * get_feed_history().effective_median_history + props.current_supply;
          assert( props.current_mbd_supply.amount.value >= 0 );
       }else
          FC_ASSERT( !"invalid symbol" );
@@ -3712,10 +3734,12 @@ void database::validate_invariants()const
                  ("total_vested_by_sp",total_vested_by_sp) );
 
       FC_ASSERT( gpo.virtual_supply >= gpo.current_supply );
-      if ( !get_feed_history().current_median_history.is_null() )
+      if ( !get_feed_history().effective_median_history.is_null() )
       {
-         FC_ASSERT( gpo.current_mbd_supply * get_feed_history().current_median_history + gpo.current_supply
-            == gpo.virtual_supply, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)("get_feed_history().current_median_history",get_feed_history().current_median_history)("gpo.current_supply",gpo.current_supply)("gpo.virtual_supply",gpo.virtual_supply) );
+         FC_ASSERT( gpo.current_mbd_supply * get_feed_history().effective_median_history + gpo.current_supply
+            == gpo.virtual_supply, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)
+                 ("get_feed_history().effective_median_history",get_feed_history().effective_median_history)
+                 ("gpo.current_supply",gpo.current_supply)("gpo.virtual_supply",gpo.virtual_supply) );
       }
    }
    FC_CAPTURE_LOG_AND_RETHROW( (head_block_num()) );

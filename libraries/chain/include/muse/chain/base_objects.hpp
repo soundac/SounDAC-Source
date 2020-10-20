@@ -92,7 +92,8 @@ namespace muse { namespace chain {
          static const uint8_t space_id = implementation_ids;
          static const uint8_t type_id  = impl_feed_history_object_type;
 
-         price               current_median_history; ///< the current median of the price history, used as the base for convert operations
+         price               actual_median_history; ///< the current actual median of the price history, used as the base for issuing MBD
+         price               effective_median_history; ///< the base converting MBD back to MUSE
          std::deque<price>   price_history; ///< tracks this last week of median_feed one per hour
    };
 
@@ -268,7 +269,7 @@ FC_REFLECT_DERIVED( muse::chain::limit_order_object, (graphene::db::object),
                     (created)(expiration)(seller)(orderid)(for_sale)(sell_price) )
 
 FC_REFLECT_DERIVED( muse::chain::feed_history_object, (graphene::db::object),
-                    (current_median_history)(price_history) )
+                    (actual_median_history)(effective_median_history)(price_history) )
 
 FC_REFLECT_DERIVED( muse::chain::convert_request_object, (graphene::db::object),
                     (owner)(requestid)(amount)(conversion_date) )

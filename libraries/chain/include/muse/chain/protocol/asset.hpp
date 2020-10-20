@@ -129,17 +129,32 @@ namespace muse { namespace chain {
 
 } }
 
-namespace fc {
-    inline void to_variant( const muse::chain::asset& var,  fc::variant& vo, uint32_t max_depth = 1 )
-    {
-       vo = var.to_string();
-    }
-    inline void from_variant( const fc::variant& var,  muse::chain::asset& vo, uint32_t max_depth = 1 )
-    {
-       vo = muse::chain::asset::from_string( var.as_string() );
-    }
-}
-
 FC_REFLECT( muse::chain::asset, (amount)(asset_id) )
 FC_REFLECT( muse::chain::price, (base)(quote) )
 
+namespace fc {
+    inline void to_variant( const muse::chain::asset& var,  fc::variant& vo, uint32_t max_depth = 1 )
+    {
+       if (var.asset_id == MUSE_SYMBOL || var.asset_id == MBD_SYMBOL || var.asset_id == VESTS_SYMBOL)
+          vo = var.to_string();
+       else
+       {
+          mutable_variant_object mvo;
+          fc::reflector<muse::chain::asset>::visit( fc::to_variant_visitor<muse::chain::asset>( mvo, var, max_depth ) );
+          vo = std::move(mvo);
+       }
+           
+    }
+    inline void from_variant( const fc::variant& var,  muse::chain::asset& vo, uint32_t max_depth = 1 )
+    {
+       if (var.is_object())
+          fc::reflector<muse::chain::asset>::visit( from_variant_visitor<muse::chain::asset>( var.get_object(), vo, max_depth ) );
+       else
+       {
+          vo = muse::chain::asset::from_string( var.as_string() );
+          FC_ASSERT( vo.asset_id == MUSE_SYMBOL || vo.asset_id == MBD_SYMBOL || vo.asset_id == VESTS_SYMBOL,
+                     "Invalid serialized asset amount, use object representation instead of string!",
+                     ("v",var.as_string()) );
+       }
+    }
+}

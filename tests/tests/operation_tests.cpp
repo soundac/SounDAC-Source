@@ -2345,7 +2345,7 @@ BOOST_FIXTURE_TEST_CASE( convert_forward, database_fixture )
    // fake a price feed
    generate_block();
    db.modify( db.get_feed_history(), [] ( feed_history_object& fho ){
-      fho.current_median_history = asset(1) / asset(1, MBD_SYMBOL);
+      fho.effective_median_history = fho.actual_median_history = asset(1) / asset(1, MBD_SYMBOL);
    });
    trx.clear();
    trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );

@@ -292,7 +292,8 @@ public:
                                                                           time_point_sec(time_point::now()),
                                                                           " old");
       result["participation"] = (100*dynamic_props.recent_slots_filled.popcount()) / 128.0;
-      result["median_mbd_price"] = fc::variant( _remote_db->get_current_median_history_price(), 3 );
+      result["actual_mbd_price"] = fc::variant( _remote_db->get_feed_history().actual_median_history, 3 );
+      result["effective_mbd_price"] = fc::variant( _remote_db->get_feed_history().effective_median_history, 3 );
       result["account_creation_fee"] = fc::variant( _remote_db->get_chain_properties().account_creation_fee, 2 );
       return result;
    }
