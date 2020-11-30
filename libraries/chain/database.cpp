@@ -2842,10 +2842,12 @@ try {
 
                if( gpo.current_mbd_supply.amount > 0 )
                {
-                  price min_price( asset( 9 * gpo.current_mbd_supply.amount, MBD_SYMBOL ), gpo.current_supply );
+		  if( fho.effective_median_history.base.asset_id != MBD_SYMBOL )
+		     fho.effective_median_history = ~fho.effective_median_history;
+                  price max_price( asset( 19 * gpo.current_mbd_supply.amount, MBD_SYMBOL ), gpo.current_supply );
 
-                  if( min_price > fho.effective_median_history )
-                     fho.effective_median_history = min_price;
+                  if( max_price > fho.effective_median_history )
+                     fho.effective_median_history = max_price;
                }
             }
          }
