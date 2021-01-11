@@ -431,18 +431,26 @@ class database_api
       ////////////
 
       /**
-       * @breif Gets the current order book for ASSET:SBD market
+       * @breif Gets the current order book for MUSE:MBD market
        * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
        * @return Order book
        */
       order_book get_order_book( uint32_t limit = 1000 )const;
       /**
-       * Gets the current order book for the given asset market
+       * Gets the current order book for the given asset:MBD market
        * @param asset_id Asset ID to look for
        * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
        * @return Order book
        */
       order_book get_order_book_for_asset( asset_id_type asset_id,  uint32_t limit = 1000 )const;
+      /**
+       * Gets the current order book for the given market pair
+       * @param base_id first Asset ID to look for
+       * @param quote_id second asset ID to look for
+       * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
+       * @return Order book
+       */
+      order_book get_order_book_for_assets( asset_id_type base_id, asset_id_type quote_id, uint32_t limit = 1000 )const;
       /**
        * Get open orders by the given account
        * @param owner Account opening the orders
@@ -587,6 +595,7 @@ FC_API(muse::app::database_api,
    // Market
    (get_order_book)
    (get_order_book_for_asset)
+   (get_order_book_for_assets)
    (get_open_orders)
    (get_liquidity_queue)
 

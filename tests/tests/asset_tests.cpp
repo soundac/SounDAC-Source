@@ -193,6 +193,8 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
 
 BOOST_AUTO_TEST_CASE(trade_assets_test)
 { try {
+    muse::app::database_api db_api( db );
+
     ACTORS( (alice)(bob)(federation));
     fund("alice");
     vest("alice", 50000);
@@ -319,6 +321,37 @@ BOOST_AUTO_TEST_CASE(trade_assets_test)
         PUSH_TX(db, trx);
         trx.clear();
     }
+
+    auto orderbook = db_api.get_order_book(1000);
+    BOOST_CHECK_EQUAL("MUSE", orderbook.base);
+    BOOST_CHECK_EQUAL("MBD", orderbook.quote);
+    BOOST_CHECK(orderbook.bids.empty());
+    BOOST_REQUIRE_EQUAL(3u, orderbook.asks.size());
+    BOOST_CHECK(MBD_SYMBOL(db).amount(10) / MUSE_SYMBOL(db).amount(1000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(10, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(1000, orderbook.asks[0].base.value);
+
+    orderbook = db_api.get_order_book_for_asset(bts.id, 1000);
+    BOOST_CHECK_EQUAL("BTS", orderbook.base);
+    BOOST_CHECK_EQUAL("MBD", orderbook.quote);
+    BOOST_CHECK(orderbook.bids.empty());
+    BOOST_REQUIRE_EQUAL(3u, orderbook.asks.size());
+    BOOST_CHECK(MBD_SYMBOL(db).amount(200000) / bts.amount(100000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(200000, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(100000, orderbook.asks[0].base.value);
+
+    orderbook = db_api.get_order_book_for_assets(btc.id, MUSE_SYMBOL, 1);
+    BOOST_CHECK_EQUAL("BTC", orderbook.base);
+    BOOST_CHECK_EQUAL("MUSE", orderbook.quote);
+    BOOST_REQUIRE_EQUAL(1u, orderbook.bids.size());
+    BOOST_CHECK(MUSE_SYMBOL(db).amount(350000) / btc.amount(22) == orderbook.bids[0].order_price);
+    BOOST_CHECK_EQUAL(350000, orderbook.bids[0].quote.value);
+    BOOST_CHECK_EQUAL(22, orderbook.bids[0].base.value);
+    BOOST_REQUIRE_EQUAL(1u, orderbook.asks.size());
+    BOOST_CHECK(MUSE_SYMBOL(db).amount(3000000000) / btc.amount(20000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(3000000000, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(20000, orderbook.asks[0].base.value);
+
 } FC_LOG_AND_RETHROW() }
 
 BOOST_FIXTURE_TEST_CASE( hardfork_test, database_fixture )
