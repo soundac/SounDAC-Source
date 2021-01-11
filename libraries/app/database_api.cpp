@@ -91,6 +91,7 @@ class database_api_impl : public std::enable_shared_from_this<database_api_impl>
       vector<asset_object> lookup_uias(uint64_t start_id )const;
       optional<asset_object>         get_uia_details(string UIA)const;
       asset_object get_asset(asset_id_type asset_id)const;
+      map<account_id_type, share_type> get_asset_holders( asset_id_type asset_id )const;
       vector <account_balance_object> get_uia_balances( string account );
 
       // Authority / validation
@@ -1115,6 +1116,11 @@ asset_object database_api::get_asset(asset_id_type asset_id)const
    return my->get_asset(asset_id);
 }
 
+map<account_id_type, share_type> database_api::get_asset_holders(asset_id_type asset_id)const
+{
+   return my->get_asset_holders(asset_id);
+}
+
 vector<asset_object> database_api_impl::lookup_uias(uint64_t start_id )const
 {
    vector<asset_object> result;
@@ -1141,6 +1147,34 @@ optional<asset_object> database_api_impl::get_uia_details(string UIA)const
 asset_object database_api_impl::get_asset(asset_id_type asset_id)const
 {
    return _db.get(asset_id);
+}
+
+map<account_id_type, share_type> database_api_impl::get_asset_holders(asset_id_type asset_id)const
+{
+   map<account_id_type, share_type> result;
+   if( asset_id == MUSE_SYMBOL || asset_id == MBD_SYMBOL || asset_id == VESTS_SYMBOL )
+   {
+      for( const auto& acct : _db.get_index_type<account_index>().indices() )
+      {
+         share_type balance = asset_id == MUSE_SYMBOL ? acct.balance.amount
+                                : asset_id == MBD_SYMBOL ? acct.mbd_balance.amount
+                                   : acct.vesting_shares.amount;
+         if( balance > 0 )
+            result[acct.id] = balance;
+      }
+   }
+   else // not a base asset
+   {
+      const auto& idx = _db.get_index_type<account_balance_index>().indices().get<by_asset_balance>();
+      auto itr = idx.lower_bound(boost::make_tuple(asset_id));
+      while( itr != idx.end() && itr->asset_type == asset_id )
+      {
+         if( itr->balance > 0 )
+            result[itr->owner] = itr->balance;
+         ++itr;
+      }
+   }
+   return result;
 }
 
 

@@ -189,7 +189,15 @@ class database_api
        * @ingroup db_api
        */
       asset_object get_asset( asset_id_type asset_id )const;
-      
+
+      /****************
+       * Get all holders of the given asset
+       * @param asset_id ID of the asset to look for
+       * @return a mapping of account ids and asset balances
+       * @ingroup db_api
+       */
+      map<account_id_type, share_type> get_asset_holders( asset_id_type asset_id )const;
+
       /****************
        * Get User Issued Asset balances for a particular account
        * @param account Account to look for
@@ -609,6 +617,7 @@ FC_API(muse::app::database_api,
    (lookup_uias)
    (get_uia_details)
    (get_asset)
+   (get_asset_holders)
    (get_uia_balances)
    //score
    (get_account_scoring)
