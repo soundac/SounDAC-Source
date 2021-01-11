@@ -2384,15 +2384,6 @@ BOOST_FIXTURE_TEST_CASE( convert_forward, database_fixture )
    BOOST_CHECK_EQUAL( fed_asset_id(db).mbd_balance.amount.value, ASSET( "0.001 2.28.2" ).amount.value );
 } FC_LOG_AND_RETHROW() }
 
-BOOST_AUTO_TEST_CASE( limit_order_create_validate )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: limit_order_create_validate" );
-   }
-   FC_LOG_AND_RETHROW()
-}
-
 BOOST_AUTO_TEST_CASE( limit_order_create_authorities )
 {
    try
@@ -2422,12 +2413,6 @@ BOOST_AUTO_TEST_CASE( limit_order_create_authorities )
       tx.sign( alice_private_key, db.get_chain_id() );
       MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_duplicate_sig );
 
-/*      BOOST_TEST_MESSAGE( "--- Test failure with additional incorrect signature" );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-*/
       BOOST_TEST_MESSAGE( "--- Test failure with incorrect signature" );
       tx.signatures.clear();
       tx.sign( alice_post_key, db.get_chain_id() );
@@ -2755,12 +2740,6 @@ BOOST_AUTO_TEST_CASE( limit_order_create2_authorities )
       tx.sign( alice_private_key, db.get_chain_id() );
       MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_duplicate_sig );
 
-/*      BOOST_TEST_MESSAGE( "--- Test failure with additional incorrect signature" );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-*/
       BOOST_TEST_MESSAGE( "--- Test failure with incorrect signature" );
       tx.signatures.clear();
       tx.sign( alice_post_key, db.get_chain_id() );
