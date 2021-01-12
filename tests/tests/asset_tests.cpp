@@ -191,6 +191,169 @@ BOOST_AUTO_TEST_CASE(trade_asset_test)
     BOOST_CHECK_EQUAL(100000, amount.amount.value);
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE(trade_assets_test)
+{ try {
+    muse::app::database_api db_api( db );
+
+    ACTORS( (alice)(bob)(federation));
+    fund("alice");
+    vest("alice", 50000);
+    fund("bob", 5000000);
+    vest("bob", 50000);
+
+    trx.clear();
+    trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+    {
+        asset_create_operation aco;
+        aco.issuer = "federation";
+        aco.symbol = "BTS";
+        aco.precision = 5;
+        aco.common_options.description = "IOU for BitShares core token";
+        trx.operations.emplace_back(aco);
+        aco.symbol = "BTC";
+        aco.precision = 8;
+        aco.common_options.description = "IOU for Bitcoin";
+        trx.operations.emplace_back(std::move(aco));
+        sign(trx, federation_private_key);
+        PUSH_TX(db, trx);
+        trx.clear();
+    }
+
+    const asset_object& bts = db.get_asset("BTS");
+    const asset_object& btc = db.get_asset("BTC");
+
+    {
+        asset_issue_operation aio;
+        aio.issuer = "federation";
+        aio.asset_to_issue = bts.amount(5000000);
+        aio.issue_to_account = "bob";
+        trx.operations.emplace_back(aio);
+        aio.asset_to_issue = btc.amount(500000);
+        aio.issue_to_account = "alice";
+        trx.operations.emplace_back(std::move(aio));
+        sign(trx, federation_private_key);
+        PUSH_TX(db, trx);
+        trx.clear();
+    }
+
+    {
+        limit_order_create_operation loc;
+        loc.owner = "alice";
+        loc.amount_to_sell = btc.amount(10000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(30000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = btc.amount(11000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(34000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = btc.amount(12000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(38000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = btc.amount(20000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(3000000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = btc.amount(21000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(3250000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = btc.amount(22000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(3500000000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(1000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(10);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(1100);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(12);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(1200);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(14);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        sign(trx, alice_private_key);
+        PUSH_TX(db, trx);
+        trx.clear();
+
+        loc.owner = "bob";
+        loc.amount_to_sell = bts.amount(100000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(200000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = bts.amount(110000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(230000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = bts.amount(120000);
+        loc.min_to_receive = MBD_SYMBOL(db).amount(260000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = bts.amount(100000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(30000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = bts.amount(110000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(34000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = bts.amount(120000);
+        loc.min_to_receive = MUSE_SYMBOL(db).amount(38000);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(300000);
+        loc.min_to_receive = btc.amount(20);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(325000);
+        loc.min_to_receive = btc.amount(21);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        loc.amount_to_sell = MUSE_SYMBOL(db).amount(350000);
+        loc.min_to_receive = btc.amount(22);
+        trx.operations.emplace_back(loc);
+        loc.orderid++;
+        sign(trx, bob_private_key);
+        PUSH_TX(db, trx);
+        trx.clear();
+    }
+
+    auto orderbook = db_api.get_order_book(1000);
+    BOOST_CHECK_EQUAL("MUSE", orderbook.base);
+    BOOST_CHECK_EQUAL("MBD", orderbook.quote);
+    BOOST_CHECK(orderbook.bids.empty());
+    BOOST_REQUIRE_EQUAL(3u, orderbook.asks.size());
+    BOOST_CHECK(MBD_SYMBOL(db).amount(10) / MUSE_SYMBOL(db).amount(1000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(10, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(1000, orderbook.asks[0].base.value);
+
+    orderbook = db_api.get_order_book_for_asset(bts.id, 1000);
+    BOOST_CHECK_EQUAL("BTS", orderbook.base);
+    BOOST_CHECK_EQUAL("MBD", orderbook.quote);
+    BOOST_CHECK(orderbook.bids.empty());
+    BOOST_REQUIRE_EQUAL(3u, orderbook.asks.size());
+    BOOST_CHECK(MBD_SYMBOL(db).amount(200000) / bts.amount(100000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(200000, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(100000, orderbook.asks[0].base.value);
+
+    orderbook = db_api.get_order_book_for_assets(btc.id, MUSE_SYMBOL, 1);
+    BOOST_CHECK_EQUAL("BTC", orderbook.base);
+    BOOST_CHECK_EQUAL("MUSE", orderbook.quote);
+    BOOST_REQUIRE_EQUAL(1u, orderbook.bids.size());
+    BOOST_CHECK(MUSE_SYMBOL(db).amount(350000) / btc.amount(22) == orderbook.bids[0].order_price);
+    BOOST_CHECK_EQUAL(350000, orderbook.bids[0].quote.value);
+    BOOST_CHECK_EQUAL(22, orderbook.bids[0].base.value);
+    BOOST_REQUIRE_EQUAL(1u, orderbook.asks.size());
+    BOOST_CHECK(MUSE_SYMBOL(db).amount(3000000000) / btc.amount(20000) == orderbook.asks[0].order_price);
+    BOOST_CHECK_EQUAL(3000000000, orderbook.asks[0].quote.value);
+    BOOST_CHECK_EQUAL(20000, orderbook.asks[0].base.value);
+
+} FC_LOG_AND_RETHROW() }
+
 BOOST_FIXTURE_TEST_CASE( hardfork_test, database_fixture )
 { try {
 

@@ -597,6 +597,9 @@ void convert_evaluator::do_apply( const convert_operation& o )
 
 void limit_order_create_evaluator::do_apply( const limit_order_create_operation& o )
 {
+   if( !db().has_hardfork(MUSE_HARDFORK_0_6) )
+      FC_ASSERT( o.amount_to_sell.asset_id == MBD_SYMBOL || o.min_to_receive.asset_id == MBD_SYMBOL );
+
    FC_ASSERT( o.expiration > db().head_block_time() );
 
    const auto& owner = db().get_account( o.owner );
@@ -622,6 +625,9 @@ void limit_order_create_evaluator::do_apply( const limit_order_create_operation&
 
 void limit_order_create2_evaluator::do_apply( const limit_order_create2_operation& o )
 {
+   if( !db().has_hardfork(MUSE_HARDFORK_0_6) )
+      FC_ASSERT( o.exchange_rate.base.asset_id == MBD_SYMBOL || o.exchange_rate.quote.asset_id == MBD_SYMBOL );
+
    FC_ASSERT( o.expiration > db().head_block_time() );
 
    const auto& owner = db().get_account( o.owner );
