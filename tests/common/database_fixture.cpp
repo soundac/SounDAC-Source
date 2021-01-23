@@ -1,6 +1,7 @@
 #include <boost/test/unit_test.hpp>
 #include <boost/program_options.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <graphene/db/simple_index.hpp>
 #include <graphene/utilities/tempdir.hpp>
 
@@ -412,7 +413,8 @@ void database_fixture::set_price_feed( const price& new_price )
    } FC_CAPTURE_AND_RETHROW( (new_price) )
 
    generate_blocks( MUSE_BLOCKS_PER_HOUR );
-   BOOST_REQUIRE( feed_history_id_type()( db ).current_median_history == new_price );
+   BOOST_REQUIRE( feed_history_id_type()( db ).actual_median_history == new_price );
+   BOOST_REQUIRE( feed_history_id_type()( db ).effective_median_history == new_price );
 }
 
 const asset& database_fixture::get_balance( const string& account_name )const
@@ -519,8 +521,8 @@ void database_fixture::validate_database( void )
       FC_ASSERT( gpo.current_mbd_supply == total_mbd, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)("total_mbd",total_mbd) );
       FC_ASSERT( gpo.total_vesting_shares == total_vesting, "", ("gpo.total_vesting_shares",gpo.total_vesting_shares)("total_vesting",total_vesting) );
       FC_ASSERT( gpo.total_vesting_shares.amount == total_vsf_votes, "", ("total_vesting_shares",gpo.total_vesting_shares)("total_vsf_votes",total_vsf_votes) );
-      if ( !db.get_feed_history().current_median_history.is_null() )
-         BOOST_REQUIRE( gpo.current_mbd_supply * db.get_feed_history().current_median_history + gpo.current_supply
+      if ( !db.get_feed_history().effective_median_history.is_null() )
+         BOOST_REQUIRE( gpo.current_mbd_supply * db.get_feed_history().effective_median_history + gpo.current_supply
             == gpo.virtual_supply );
 
       for( auto itr = account_idx.begin(); itr != account_idx.end(); itr++ )

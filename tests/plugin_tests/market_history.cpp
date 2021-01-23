@@ -1,5 +1,6 @@
 #include <boost/test/unit_test.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/chain/account_object.hpp>
 #include <muse/chain/protocol/base_operations.hpp>
 

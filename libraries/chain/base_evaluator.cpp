@@ -91,7 +91,6 @@ void account_create_evaluator::do_apply( const account_create_operation& o )
       acc.last_owner_update = fc::time_point_sec::min();
       acc.created = props.time;
       acc.last_vote_time = props.time;
-      acc.mined = false;
 
       acc.recovery_account = o.creator;
 
@@ -164,7 +163,6 @@ void account_create_with_delegation_evaluator::do_apply( const account_create_wi
       acc.last_owner_update = fc::time_point_sec::min();
       acc.created = props.time;
       acc.last_vote_time = props.time;
-      acc.mined = false;
       acc.received_vesting_shares = o.delegation;
 
       #ifndef IS_LOW_MEM
@@ -348,18 +346,14 @@ void withdraw_vesting_evaluator::do_apply( const withdraw_vesting_operation& o )
     FC_ASSERT( account.vesting_shares >= asset( 0, VESTS_SYMBOL ) );
     FC_ASSERT( account.vesting_shares - account.delegated_vesting_shares >= o.vesting_shares, "Account does not have sufficient Steem Power for withdraw." );
 
-    if( !account.mined )  {
-      const auto& props = db().get_dynamic_global_properties();
-      const witness_schedule_object& wso = db().get_witness_schedule_object();
+    const auto& props = db().get_dynamic_global_properties();
+    const witness_schedule_object& wso = db().get_witness_schedule_object();
 
-      asset min_vests = wso.median_props.account_creation_fee * props.get_vesting_share_price();
-      min_vests.amount.value *= 10;
+    asset min_vests = wso.median_props.account_creation_fee * props.get_vesting_share_price();
+    min_vests.amount.value *= 10;
 
-      FC_ASSERT( account.vesting_shares > min_vests,
-                 "Account registered by another account requires 10x account creation fee worth of Vestings before it can power down" );
-    }
-
-
+    FC_ASSERT( account.vesting_shares > min_vests,
+               "Account registered by another account requires 10x account creation fee worth of Vestings before it can power down" );
 
     if( o.vesting_shares.amount <= 0 ) {
        if( o.vesting_shares.amount == 0 ) // SOFT FORK, remove after HF 4
@@ -562,26 +556,50 @@ void feed_publish_evaluator::do_apply( const feed_publish_operation& o )
 
 void convert_evaluator::do_apply( const convert_operation& o )
 {
+  if( o.amount.asset_id == MUSE_SYMBOL )
+     FC_ASSERT( db().has_hardfork( MUSE_HARDFORK_0_6 ), "XSD -> xUSD conversion only allowed after hardfork 6!" );
+
   const auto& owner = db().get_account( o.owner );
   FC_ASSERT( db().get_balance( owner, o.amount.asset_id ) >= o.amount );
 
   db().adjust_balance( owner, -o.amount );
 
   const auto& fhistory = db().get_feed_history();
-  FC_ASSERT( !fhistory.current_median_history.is_null() );
+  FC_ASSERT( !fhistory.effective_median_history.is_null() );
 
-  db().create<convert_request_object>( [&]( convert_request_object& obj )
+  if( o.amount.asset_id == MUSE_SYMBOL )
   {
-      obj.owner           = o.owner;
-      obj.requestid       = o.requestid;
-      obj.amount          = o.amount;
-      obj.conversion_date = db().head_block_time() + MUSE_CONVERSION_DELAY; // 1 week
-  });
+     const asset amount_to_issue = o.amount * fhistory.effective_median_history;
+
+     db().adjust_balance( owner, amount_to_issue );
+
+     db().push_applied_operation( fill_convert_request_operation ( o.owner, o.requestid, o.amount, amount_to_issue ) );
+
+     db().modify( db().get_dynamic_global_properties(),
+                  [&o,&amount_to_issue,&fhistory]( dynamic_global_property_object& p )
+     {
+        p.current_supply -= o.amount;
+        p.current_mbd_supply += amount_to_issue;
+        p.virtual_supply -= o.amount;
+        p.virtual_supply += amount_to_issue * fhistory.effective_median_history;
+     } );
+  }
+  else
+     db().create<convert_request_object>( [&]( convert_request_object& obj )
+     {
+        obj.owner           = o.owner;
+        obj.requestid       = o.requestid;
+        obj.amount          = o.amount;
+        obj.conversion_date = db().head_block_time() + MUSE_CONVERSION_DELAY; // 1 week
+     });
 
 }
 
 void limit_order_create_evaluator::do_apply( const limit_order_create_operation& o )
 {
+   if( !db().has_hardfork(MUSE_HARDFORK_0_6) )
+      FC_ASSERT( o.amount_to_sell.asset_id == MBD_SYMBOL || o.min_to_receive.asset_id == MBD_SYMBOL );
+
    FC_ASSERT( o.expiration > db().head_block_time() );
 
    const auto& owner = db().get_account( o.owner );
@@ -607,6 +625,9 @@ void limit_order_create_evaluator::do_apply( const limit_order_create_operation&
 
 void limit_order_create2_evaluator::do_apply( const limit_order_create2_operation& o )
 {
+   if( !db().has_hardfork(MUSE_HARDFORK_0_6) )
+      FC_ASSERT( o.exchange_rate.base.asset_id == MBD_SYMBOL || o.exchange_rate.quote.asset_id == MBD_SYMBOL );
+
    FC_ASSERT( o.expiration > db().head_block_time() );
 
    const auto& owner = db().get_account( o.owner );
@@ -812,7 +833,9 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
 
    const auto& delegator = _db.get_account( op.delegator );
    const auto& delegatee = _db.get_account( op.delegatee );
-   const auto& delegation_idx = db().get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
+   const streaming_platform_object* delegator_sp = _db.find_streaming_platform( op.delegator );
+   const streaming_platform_object* delegatee_sp = _db.find_streaming_platform( op.delegatee );
+   const auto& delegation_idx = _db.get_index_type< vesting_delegation_index >().indices().get< by_delegation >();
    auto delegation = delegation_idx.find( boost::make_tuple( op.delegator, op.delegatee ) );
 
    auto available_shares = delegator.vesting_shares - delegator.delegated_vesting_shares - asset( delegator.to_withdraw - delegator.withdrawn, VESTS_SYMBOL );
@@ -823,6 +846,8 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
    auto min_delegation = asset( wso.median_props.account_creation_fee.amount * 10, MUSE_SYMBOL ) * gpo.get_vesting_share_price();
    auto min_update = wso.median_props.account_creation_fee * gpo.get_vesting_share_price();
 
+   int64_t old_delegation = 0;
+   share_type sp_delta = 0;
    // If delegation doesn't exist, create it
    if( delegation == delegation_idx.end() )
    {
@@ -846,14 +871,21 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          a.received_vesting_shares += op.vesting_shares;
       });
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = op.vesting_shares.amount;
+      else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         sp_delta = -op.vesting_shares.amount;
    }
    // Else if the delegation is increasing
    else if( op.vesting_shares >= delegation->vesting_shares )
    {
+      old_delegation = delegation->vesting_shares.amount.value;
       auto delta = op.vesting_shares - delegation->vesting_shares;
 
-      FC_ASSERT( delta >= min_update, "Steem Power increase is not enough of a difference. min_update: ${min}", ("min", min_update) );
-      FC_ASSERT( available_shares >= op.vesting_shares - delegation->vesting_shares, "Account does not have enough vesting shares to delegate." );
+      FC_ASSERT( delta >= min_update,
+                 "Vests increase is not enough of a difference. min_update: ${min}", ("min", min_update) );
+      FC_ASSERT( available_shares >= op.vesting_shares - delegation->vesting_shares,
+                 "Account does not have enough vesting shares to delegate." );
 
       _db.modify( delegator, [delta]( account_object& a )
       {
@@ -869,20 +901,28 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          obj.vesting_shares = op.vesting_shares;
       });
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = delta.amount;
+      else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         sp_delta = -delta.amount;
    }
    // Else the delegation is decreasing
    else /* delegation->vesting_shares > op.vesting_shares */
    {
+      old_delegation = delegation->vesting_shares.amount.value;
       auto delta = delegation->vesting_shares - op.vesting_shares;
 
       if( op.vesting_shares.amount > 0 )
       {
-         FC_ASSERT( delta >= min_update, "Steem Power decrease is not enough of a difference. min_update: ${min}", ("min", min_update) );
-         FC_ASSERT( op.vesting_shares >= min_delegation, "Delegation must be removed or leave minimum delegation amount of ${v}", ("v", min_delegation) );
+         FC_ASSERT( delta >= min_update, "Vests decrease is not enough of a difference. min_update: ${min}",
+                    ("min", min_update) );
+         FC_ASSERT( op.vesting_shares >= min_delegation,
+                    "Delegation must be removed or leave minimum delegation amount of ${v}", ("v", min_delegation) );
       }
       else
       {
-         FC_ASSERT( delegation->vesting_shares.amount > 0, "Delegation would set vesting_shares to zero, but it is already zero");
+         FC_ASSERT( delegation->vesting_shares.amount > 0,
+                    "Delegation would set vesting_shares to zero, but it is already zero" );
       }
 
       _db.create< vesting_delegation_expiration_object >( [&_db,&op,&gpo,&delegation,delta]( vesting_delegation_expiration_object& obj )
@@ -908,6 +948,43 @@ void delegate_vesting_shares_evaluator::do_apply( const delegate_vesting_shares_
       {
          _db.remove( *delegation );
       }
+      if( delegator_sp == nullptr && delegatee_sp != nullptr )
+         sp_delta = -delta.amount;
+      // else if( delegator_sp != nullptr && delegatee_sp == nullptr )
+         // delegator receives delegation back with a delay
+   }
+
+   if( sp_delta != 0 )
+      _db.modify( gpo, [sp_delta] ( dynamic_global_property_object& dgpo ) {
+         dgpo.total_vested_by_platforms += sp_delta;
+      });
+
+   if( old_delegation != op.vesting_shares.amount && !delegatee.redelegations.empty() )
+   {
+       map<account_id_type,int64_t> deltas;
+       _db.modify( delegatee, [old_delegation,&deltas,&op] ( account_object& acct ) {
+          for( auto& r : acct.redelegations )
+          {
+             const uint64_t old = ( fc::uint128_t( old_delegation )
+                                    * r.second.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+             const uint64_t now = ( fc::uint128_t( op.vesting_shares.amount.value )
+                                    * r.second.redelegate_pct / MUSE_100_PERCENT ).to_uint64();
+             const int64_t delta = static_cast<int64_t>( now ) - old;
+             if( delta != 0 )
+             {
+                r.second.redelegated += delta;
+                acct.redelegated_vesting_shares.amount += delta;
+                deltas[r.first] = delta;
+             }
+          }
+       });
+       for( const auto& d : deltas )
+       {
+          const auto& acct = _db.get<account_object>( d.first );
+          _db.modify( acct, [&d] ( account_object& acct ) {
+              acct.rereceived_vesting_shares.amount += d.second;
+          });
+       }
    }
 }
 

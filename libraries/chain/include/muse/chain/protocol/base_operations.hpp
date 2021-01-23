@@ -628,9 +628,9 @@ namespace muse { namespace chain {
     * during an attack. These 30 days match the 30 days that an
     * owner authority is valid for recovery purposes.
     *
-    * On account creation the recovery account is set either to the creator of
-    * the account (The account that pays the creation fee and is a signer on the transaction)
-    * or to the empty string if the account was mined. An account with no recovery
+    * On account creation the recovery account is set to the creator of the
+    * account (i. e. the account that pays the creation fee and is a signer on
+    * the transaction). An account with no recovery
     * has the top voted witness as a recovery account, at the time the recover
     * request is created. Note: This does mean the effective recovery account
     * of an account with no listed recovery account can change at any time as
@@ -748,5 +748,7 @@ FC_REFLECT( muse::chain::prove_authority_operation, (challenged)(require_owner) 
 FC_REFLECT( muse::chain::request_account_recovery_operation, (recovery_account)(account_to_recover)(new_owner_authority)(extensions) );
 FC_REFLECT( muse::chain::recover_account_operation, (account_to_recover)(new_owner_authority)(recent_owner_authority)(extensions) );
 FC_REFLECT( muse::chain::change_recovery_account_operation, (account_to_recover)(new_recovery_account)(extensions) );
-FC_REFLECT( muse::chain::delegate_vesting_shares_operation, (delegator)(delegatee)(vesting_shares) );
+FC_REFLECT( muse::chain::delegate_vesting_shares_operation, (delegator)(delegatee)(vesting_shares)
+                                                            (extensions) // FIXME: not on testnet
+          );
 FC_REFLECT( muse::chain::return_vesting_delegation_operation, (account)(vesting_shares) )

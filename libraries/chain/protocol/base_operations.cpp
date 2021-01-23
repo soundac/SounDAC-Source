@@ -164,7 +164,6 @@ namespace muse { namespace chain {
    void limit_order_create_operation::validate()const
    {
       FC_ASSERT( is_valid_account_name( owner ) );
-      FC_ASSERT ( is_asset_type( amount_to_sell, MBD_SYMBOL ) ||  is_asset_type( min_to_receive, MBD_SYMBOL ) );
       FC_ASSERT ( !is_asset_type( min_to_receive, VESTS_SYMBOL ) && !is_asset_type( amount_to_sell, VESTS_SYMBOL ) );
       (amount_to_sell / min_to_receive).validate();
    }
@@ -174,7 +173,6 @@ namespace muse { namespace chain {
       FC_ASSERT( amount_to_sell.asset_id == exchange_rate.base.asset_id );
       exchange_rate.validate();
 
-      FC_ASSERT ( is_asset_type( exchange_rate.base, MBD_SYMBOL ) ||  is_asset_type( exchange_rate.quote, MBD_SYMBOL ) );
       FC_ASSERT ( !is_asset_type( exchange_rate.base, VESTS_SYMBOL ) && !is_asset_type( exchange_rate.quote, VESTS_SYMBOL ) );
 
       FC_ASSERT( (amount_to_sell * exchange_rate).amount > 0 ); // must not round to 0
@@ -190,7 +188,11 @@ namespace muse { namespace chain {
       FC_ASSERT( is_valid_account_name( owner ) );
       /// only allow conversion from MBD to MUSE, allowing the opposite can enable traders to abuse
       /// market fluxuations through converting large quantities without moving the price.
-      FC_ASSERT( is_asset_type( amount, MBD_SYMBOL ) );
+      if( is_asset_type( amount, MUSE_SYMBOL ) )
+         FC_ASSERT( "federation" == owner || "federation.asset" == owner,
+                    "Only federation and federation.asset accounts can convert XSD -> xUSD!" );
+      else
+         FC_ASSERT( is_asset_type( amount, MBD_SYMBOL ) );
       FC_ASSERT( amount.amount > 0 );
    }
 

@@ -24,6 +24,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/app/database_api.hpp>
 #include <muse/chain/protocol/operations.hpp>
 
@@ -732,6 +733,77 @@ BOOST_AUTO_TEST_CASE( list_content )
    songs = db_api.list_content_by_uploader( "uhura", "2.9.2", 1 );
    BOOST_CHECK_EQUAL( 1, songs.size() );
    BOOST_CHECK_EQUAL( 1, songs[0].id.instance() );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( asset_holders )
+{ try {
+   muse::app::database_api db_api( db );
+
+   ACTORS( (alice)(bob)(charlie)(federation) );
+
+   fund( "alice", 50000 );
+   vest( "alice", 50000 );
+   fund( "bob", 10000 );
+
+   BOOST_CHECK(db_api.get_asset_holders(MBD_SYMBOL).empty());
+   auto holders = db_api.get_asset_holders(MUSE_SYMBOL);
+   BOOST_CHECK(!holders.empty());
+   auto itr = holders.find(bob_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_EQUAL(10000, itr->second.value);
+
+   holders = db_api.get_asset_holders(VESTS_SYMBOL);
+   BOOST_CHECK_LT(4u, holders.size());
+   itr = holders.find(alice_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_LT(50000, itr->second.value);
+   itr = holders.find(bob_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_LT(0, itr->second.value);
+   itr = holders.find(charlie_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_LT(0, itr->second.value);
+   itr = holders.find(federation_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_LT(0, itr->second.value);
+
+   trx.clear();
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   {
+      asset_create_operation aco;
+      aco.issuer = "federation";
+      aco.symbol = "BTS";
+      aco.precision = 5;
+      aco.common_options.description = "IOU for BitShares core token";
+      trx.operations.emplace_back(std::move(aco));
+      sign(trx, federation_private_key);
+      PUSH_TX(db, trx);
+      trx.clear();
+   }
+
+   const asset_object& bts = db.get_asset("BTS");
+   BOOST_CHECK_EQUAL(0, bts.current_supply.value);
+
+   BOOST_CHECK(db_api.get_asset_holders(bts.id).empty());
+
+   {
+      asset_issue_operation aio;
+      aio.issuer = "federation";
+      aio.asset_to_issue = bts.amount(5000);
+      aio.issue_to_account = "charlie";
+      trx.operations.emplace_back(std::move(aio));
+      sign(trx, federation_private_key);
+      PUSH_TX(db, trx);
+      trx.clear();
+   }
+
+   holders = db_api.get_asset_holders(bts.id);
+   BOOST_CHECK_EQUAL(1u, holders.size());
+   itr = holders.find(charlie_id);
+   BOOST_REQUIRE(itr != holders.end());
+   BOOST_CHECK_EQUAL(5000, itr->second.value);
+
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_SUITE_END()

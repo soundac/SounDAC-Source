@@ -2331,14 +2331,58 @@ BOOST_AUTO_TEST_CASE( convert_apply )
    FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE( limit_order_create_validate )
-{
-   try
-   {
-      BOOST_TEST_MESSAGE( "Testing: limit_order_create_validate" );
-   }
-   FC_LOG_AND_RETHROW()
-}
+BOOST_FIXTURE_TEST_CASE( convert_forward, database_fixture )
+{ try {
+
+   initialize_clean( 5 );
+
+   ACTORS( (alice)(federation) );
+   const account_id_type fed_asset_id = account_create( "federation.asset", federation_public_key ).id;
+   fund( "alice", 10000000 );
+   fund( "federation", 10000000 );
+   fund( "federation.asset", 10000000 );
+
+   // fake a price feed
+   generate_block();
+   db.modify( db.get_feed_history(), [] ( feed_history_object& fho ){
+      fho.effective_median_history = fho.actual_median_history = asset(1) / asset(1, MBD_SYMBOL);
+   });
+   trx.clear();
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // convert XSD before hf 0.6 fails
+   convert_operation op;
+   op.owner = "federation";
+   op.amount = asset(1000);
+   trx.operations.emplace_back(op);
+   BOOST_CHECK_THROW( PUSH_TX( db, trx, database::skip_transaction_signatures ), fc::assert_exception );
+   trx.clear();
+
+   // apply hf 0.6
+   generate_blocks( 2*MUSE_MAX_MINERS );
+   generate_blocks( fc::time_point_sec( MUSE_HARDFORK_0_6_TIME + MUSE_BLOCK_INTERVAL ), true );
+   trx.set_expiration( db.head_block_time() + MUSE_MAX_TIME_UNTIL_EXPIRATION );
+
+   // alice can't convert XSD -> xUSD
+   op.owner = "alice";
+   trx.operations.emplace_back(op);
+   BOOST_CHECK_THROW( PUSH_TX( db, trx, database::skip_transaction_signatures ), fc::assert_exception );
+   trx.clear();
+
+   // but federation can
+   op.owner = "federation";
+   trx.operations.emplace_back(op);
+   PUSH_TX( db, trx, database::skip_transaction_signatures );
+   trx.clear();
+   BOOST_CHECK_EQUAL( federation_id(db).mbd_balance.amount.value, ASSET( "0.001 2.28.2" ).amount.value );
+
+   // and federation.asset can
+   op.owner = "federation.asset";
+   trx.operations.emplace_back(op);
+   PUSH_TX( db, trx, database::skip_transaction_signatures );
+   trx.clear();
+   BOOST_CHECK_EQUAL( fed_asset_id(db).mbd_balance.amount.value, ASSET( "0.001 2.28.2" ).amount.value );
+} FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( limit_order_create_authorities )
 {
@@ -2369,12 +2413,6 @@ BOOST_AUTO_TEST_CASE( limit_order_create_authorities )
       tx.sign( alice_private_key, db.get_chain_id() );
       MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_duplicate_sig );
 
-/*      BOOST_TEST_MESSAGE( "--- Test failure with additional incorrect signature" );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-*/
       BOOST_TEST_MESSAGE( "--- Test failure with incorrect signature" );
       tx.signatures.clear();
       tx.sign( alice_post_key, db.get_chain_id() );
@@ -2702,12 +2740,6 @@ BOOST_AUTO_TEST_CASE( limit_order_create2_authorities )
       tx.sign( alice_private_key, db.get_chain_id() );
       MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_duplicate_sig );
 
-/*      BOOST_TEST_MESSAGE( "--- Test failure with additional incorrect signature" );
-      tx.signatures.clear();
-      tx.sign( alice_private_key, db.get_chain_id() );
-      tx.sign( bob_private_key, db.get_chain_id() );
-      MUSE_REQUIRE_THROW( db.push_transaction( tx, database::skip_transaction_dupe_check ), tx_irrelevant_sig );
-*/
       BOOST_TEST_MESSAGE( "--- Test failure with incorrect signature" );
       tx.signatures.clear();
       tx.sign( alice_post_key, db.get_chain_id() );

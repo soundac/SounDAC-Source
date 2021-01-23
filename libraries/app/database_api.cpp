@@ -83,14 +83,13 @@ class database_api_impl : public std::enable_shared_from_this<database_api_impl>
       uint64_t get_account_scoring( string account );
       uint64_t get_content_scoring( string content );
       // Market
-      order_book get_order_book( uint32_t limit )const;
-      order_book get_order_book_for_asset( asset_id_type asset_id, uint32_t limit )const;
       vector< liquidity_balance > get_liquidity_queue( string start_account, uint32_t limit )const;
 
       //Assets
       vector<asset_object> lookup_uias(uint64_t start_id )const;
       optional<asset_object>         get_uia_details(string UIA)const;
       asset_object get_asset(asset_id_type asset_id)const;
+      map<account_id_type, share_type> get_asset_holders( asset_id_type asset_id )const;
       vector <account_balance_object> get_uia_balances( string account );
 
       // Authority / validation
@@ -270,10 +269,6 @@ chain_properties database_api::get_chain_properties()const
 
 feed_history_object database_api::get_feed_history()const {
    return my->_db.get_feed_history();
-}
-
-price database_api::get_current_median_history_price()const {
-   return my->_db.get_feed_history().current_median_history;
 }
 
 dynamic_global_property_object database_api_impl::get_dynamic_global_properties()const
@@ -947,7 +942,7 @@ vector<content_object> database_api_impl::list_content_by_uploader( const string
 
 order_book database_api::get_order_book( uint32_t limit )const
 {
-   return my->get_order_book( limit );
+   return get_order_book_for_assets(MUSE_SYMBOL, MBD_SYMBOL, limit);
 }
 
 vector<extended_limit_order> database_api::get_open_orders( string owner )const {
@@ -966,92 +961,47 @@ vector<extended_limit_order> database_api::get_open_orders( string owner )const 
    return result;
 }
 
-order_book database_api_impl::get_order_book( uint32_t limit )const
-{ //TODO_MUSE - change to support more symbols
-   FC_ASSERT( limit <= 1000 );
-   order_book result;
-
-   auto max_sell = price::max( MBD_SYMBOL, MUSE_SYMBOL );
-   auto max_buy = price::max( MUSE_SYMBOL, MBD_SYMBOL );
-
-   const auto& limit_price_idx = _db.get_index_type<limit_order_index>().indices().get<by_price>();
-   auto sell_itr = limit_price_idx.lower_bound(max_sell);
-   auto buy_itr  = limit_price_idx.lower_bound(max_buy);
-   auto end = limit_price_idx.end();
-
-   while(  sell_itr != end && sell_itr->sell_price.base.asset_id == MBD_SYMBOL && result.bids.size() < limit )
-   {
-      auto itr = sell_itr;
-      order cur;
-      cur.order_price = itr->sell_price;
-      cur.real_price  = (cur.order_price).to_real();
-      cur.quote = itr->for_sale;
-      cur.base = ( asset( itr->for_sale, MBD_SYMBOL ) * cur.order_price ).amount;
-      cur.created = itr->created;
-      result.bids.push_back( cur );
-      ++sell_itr;
-   }
-   while(  buy_itr != end && buy_itr->sell_price.base.asset_id == MUSE_SYMBOL && result.asks.size() < limit )
-   {
-      auto itr = buy_itr;
-      order cur;
-      cur.order_price = itr->sell_price;
-      cur.real_price  = (~cur.order_price).to_real();
-      cur.base   = itr->for_sale;
-      cur.quote     = ( asset( itr->for_sale, MUSE_SYMBOL ) * cur.order_price ).amount;
-      cur.created = itr->created;
-      result.asks.push_back( cur );
-      ++buy_itr;
-   }
-
-   return result;
-}
-
 order_book database_api::get_order_book_for_asset( asset_id_type asset_id, uint32_t limit )const
 {
-   return my->get_order_book_for_asset( asset_id, limit ); 
+   return get_order_book_for_assets(asset_id, MBD_SYMBOL, limit);
 }
-order_book database_api_impl::get_order_book_for_asset( asset_id_type asset_id, uint32_t limit )const
+order_book database_api::get_order_book_for_assets( asset_id_type base_id, asset_id_type quote_id, uint32_t limit )const
 { 
    FC_ASSERT( limit <= 1000 );
    order_book result;
-   result.base = MUSE_SYMBOL;
-   result.quote = asset_id;
 
-   const auto& limit_price_idx = _db.get_index_type<limit_order_index>().indices().get<by_price>();
-   auto sell_itr = limit_price_idx.lower_bound( price::max( MUSE_SYMBOL, asset_id ) );
-   auto sell_end  = limit_price_idx.upper_bound(  price::min( MUSE_SYMBOL, asset_id ) );
-   auto buy_itr = limit_price_idx.lower_bound( price::max( asset_id, MUSE_SYMBOL ) );
-   auto buy_end  = limit_price_idx.upper_bound(  price::min( asset_id, MUSE_SYMBOL ) );
-   
-   uint32_t count = 0;
-   while(  sell_itr != sell_end && count < limit )
+   result.base = base_id(my->_db).symbol_string;
+   result.quote = quote_id(my->_db).symbol_string;
+
+   const auto& limit_price_idx = my->_db.get_index_type<limit_order_index>().indices().get<by_price>();
+   auto sell_itr = limit_price_idx.lower_bound( price::max( base_id, quote_id ) );
+   auto sell_end  = limit_price_idx.upper_bound(  price::min( base_id, quote_id ) );
+   auto buy_itr = limit_price_idx.lower_bound( price::max( quote_id, base_id ) );
+   auto buy_end  = limit_price_idx.upper_bound(  price::min( quote_id, base_id ) );
+
+   while( sell_itr != sell_end && sell_itr->sell_price.base.asset_id == base_id && result.asks.size() < limit )
    {
-      auto itr = sell_itr;
-      order cur;
-      cur.order_price = itr->sell_price;
-      cur.real_price  = (cur.order_price).to_real();
-      cur.quote = itr->for_sale;
-      cur.base = ( asset( itr->for_sale, asset_id ) * cur.order_price ).amount;
-      cur.created = itr->created;
-      result.bids.push_back( cur );
+      result.asks.emplace_back();
+      order& cur = result.asks.back();
+      cur.order_price = ~sell_itr->sell_price;
+      cur.real_price  = cur.order_price.to_real();
+      cur.base = sell_itr->for_sale;
+      cur.quote = ( asset( sell_itr->for_sale, sell_itr->sell_price.base.asset_id ) * cur.order_price ).amount;
+      cur.created = sell_itr->created;
       ++sell_itr;
-      ++count;
    }
-   count = 0;
-   while(  buy_itr != buy_end && count < limit )
+   while( buy_itr != buy_end && buy_itr->sell_price.base.asset_id == quote_id && result.bids.size() < limit )
    {
-      auto itr = buy_itr;
-      order cur;
-      cur.order_price = itr->sell_price;
-      cur.real_price  = (~cur.order_price).to_real();
-      cur.base  = itr->for_sale;
-      cur.quote  = ( asset( itr->for_sale, MUSE_SYMBOL ) * cur.order_price ).amount;
-      cur.created = itr->created;
-      result.asks.push_back( cur );
+      result.bids.emplace_back();
+      order& cur = result.bids.back();
+      cur.order_price = buy_itr->sell_price;
+      cur.real_price  = cur.order_price.to_real();
+      cur.base = ( asset( buy_itr->for_sale, buy_itr->sell_price.base.asset_id ) * cur.order_price ).amount;
+      cur.quote = buy_itr->for_sale;
+      cur.created = buy_itr->created;
       ++buy_itr;
-      ++count;
    }
+
    return result;
 }
 
@@ -1119,6 +1069,11 @@ asset_object database_api::get_asset(asset_id_type asset_id)const
    return my->get_asset(asset_id);
 }
 
+map<account_id_type, share_type> database_api::get_asset_holders(asset_id_type asset_id)const
+{
+   return my->get_asset_holders(asset_id);
+}
+
 vector<asset_object> database_api_impl::lookup_uias(uint64_t start_id )const
 {
    vector<asset_object> result;
@@ -1145,6 +1100,34 @@ optional<asset_object> database_api_impl::get_uia_details(string UIA)const
 asset_object database_api_impl::get_asset(asset_id_type asset_id)const
 {
    return _db.get(asset_id);
+}
+
+map<account_id_type, share_type> database_api_impl::get_asset_holders(asset_id_type asset_id)const
+{
+   map<account_id_type, share_type> result;
+   if( asset_id == MUSE_SYMBOL || asset_id == MBD_SYMBOL || asset_id == VESTS_SYMBOL )
+   {
+      for( const auto& acct : _db.get_index_type<account_index>().indices() )
+      {
+         share_type balance = asset_id == MUSE_SYMBOL ? acct.balance.amount
+                                : asset_id == MBD_SYMBOL ? acct.mbd_balance.amount
+                                   : acct.vesting_shares.amount;
+         if( balance > 0 )
+            result[acct.id] = balance;
+      }
+   }
+   else // not a base asset
+   {
+      const auto& idx = _db.get_index_type<account_balance_index>().indices().get<by_asset_balance>();
+      auto itr = idx.lower_bound(boost::make_tuple(asset_id));
+      while( itr != idx.end() && itr->asset_type == asset_id )
+      {
+         if( itr->balance > 0 )
+            result[itr->owner] = itr->balance;
+         ++itr;
+      }
+   }
+   return result;
 }
 
 

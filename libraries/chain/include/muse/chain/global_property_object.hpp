@@ -110,6 +110,31 @@ namespace muse { namespace chain {
          uint64_t current_reserve_ratio = 1;
 
          uint32_t delegation_return_period = MUSE_DELEGATION_RETURN_PERIOD;
+
+         /** The number of users who have at least one streaming report in the
+          *  last 24 hours
+          */
+         uint32_t active_users = 0;
+
+         /** The number of users who have at least 1 hour worth of streaming
+          *  reports in the last 24 hours
+          */
+         uint32_t full_time_users = 0;
+
+         /** Total listening time within the past 24 hours, in seconds.
+          */
+         uint32_t total_listening_time = 0;
+
+         /** Full user time within the past 24 hours, in seconds. Means sum of
+          *  the total listening time of all users, capped at 1 hour for each
+          *  user.
+          */
+         uint32_t full_users_time = 0;
+
+         /** The totoal amount of vesting shares (including delegation but not re-delegation) held by all
+          *  streaming platforms.
+          */
+         share_type total_vested_by_platforms = 0;
    };
 }}
 
@@ -127,6 +152,7 @@ FC_REFLECT_DERIVED( muse::chain::dynamic_global_property_object, (graphene::db::
                     (total_vesting_shares)
                     (total_reward_fund_muse)
                     (supply_delta)
+                    (maximum_proposal_lifetime)
                     (mbd_interest_rate)
                     (average_block_size)
                     (maximum_block_size)
@@ -137,5 +163,10 @@ FC_REFLECT_DERIVED( muse::chain::dynamic_global_property_object, (graphene::db::
                     (max_virtual_bandwidth)
                     (current_reserve_ratio)
                     (delegation_return_period)
+                    (active_users)
+                    (full_time_users)
+                    (total_listening_time)
+                    (full_users_time)
+                    (total_vested_by_platforms)
                   )
 

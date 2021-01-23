@@ -25,6 +25,7 @@
 #include <muse/chain/protocol/base.hpp>
 #include <muse/chain/protocol/asset.hpp>
 #include <muse/chain/protocol/address.hpp>
+#include <muse/chain/protocol/ext.hpp>
 #include <fc/optional.hpp>
 
 namespace muse { namespace chain {
@@ -285,6 +286,34 @@ struct streaming_platform_update_operation : public base_operation
 
 };
 
+/**
+ * Unelected SPs can ask elected platforms to report on their behalf.
+ */
+struct request_stream_reporting_operation : public base_operation
+{
+   string requestor; // platform that wants to delegate its reporting
+   string reporter; // platform that should do the reporting
+   unsigned_int reward_pct = 0; // scaled percentage of requestor's rewards to be paid to reporter
+   unsigned_int redelegate_pct = 0; // scaled percentage of requestor's received delegated shares to be re-delegated to reporter
+   future_extensions ext;
+
+   void validate() const;
+   void get_required_active_authorities(  flat_set<string>& a )const{ a.insert(requestor); }
+};
+
+/**
+ * Unelected SPs can stop elected platforms from reporting on their behalf.
+ */
+struct cancel_stream_reporting_operation : public base_operation
+{
+   string requestor; // platform that wants to delegate its reporting
+   string reporter; // platform that should do the reporting
+   future_extensions ext;
+
+   void validate() const;
+   void get_required_active_authorities(  flat_set<string>& a )const{ a.insert(requestor); }
+};
+
 
 /**
  * All accounts with a VFS can vote for or against any streaming platform.
@@ -306,11 +335,19 @@ struct account_streaming_platform_vote_operation : public base_operation
  */
 struct streaming_platform_report_operation : public base_operation
 {
+   struct report_extensions
+   {
+      optional<string> spinning_platform;
+      optional<unsigned_int> sp_user_id;
+   };
    string streaming_platform; //<Platform submiting the report
    string consumer; //<Consumer of the art piece
    string content; //<URL of the art piece
-   uint64_t play_time; //<How long the consumer listened to it (in seconds))
    string playlist_creator;//<Not used
+   uint32_t play_time = 0; //<How long the consumer listened to it (in seconds))
+   uint16_t dummy1 = 0;
+   uint8_t dummy2 = 0;
+   extension<report_extensions> ext;
 
    void validate() const;
    void get_required_active_authorities(  flat_set<string>& a )const{ a.insert(streaming_platform); }
@@ -381,9 +418,13 @@ FC_REFLECT( muse::chain::unfriend_operation, (who)(whom) )
 FC_REFLECT( muse::chain::content_reward_operation, (payee)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::curate_reward_operation, (curator)(url)(mbd_payout)(vesting_payout) )
 FC_REFLECT( muse::chain::playing_reward_operation, (platform)(url)(mbd_payout)(vesting_payout) )
-FC_REFLECT( muse::chain::streaming_platform_report_operation, (streaming_platform)(consumer)(content)(playlist_creator)(play_time))
+FC_REFLECT( muse::chain::streaming_platform_report_operation::report_extensions, (spinning_platform)(sp_user_id) )
+FC_REFLECT( muse::chain::streaming_platform_report_operation,
+            (streaming_platform)(consumer)(content)(playlist_creator)(play_time)(dummy1)(dummy2)(ext) )
 FC_REFLECT( muse::chain::account_streaming_platform_vote_operation, (account)(streaming_platform)(approve))
 FC_REFLECT( muse::chain::streaming_platform_update_operation, (owner)(url)(fee))
+FC_REFLECT( muse::chain::request_stream_reporting_operation, (requestor)(reporter)(reward_pct)(redelegate_pct)(ext) )
+FC_REFLECT( muse::chain::cancel_stream_reporting_operation, (requestor)(reporter)(ext) )
 FC_REFLECT( muse::chain::vote_operation, (voter)(url)(weight) )
 FC_REFLECT( muse::chain::balance_claim_operation,
             (deposit_to_account)(balance_to_claim)(balance_owner_key)(total_claimed) )

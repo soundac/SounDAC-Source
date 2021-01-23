@@ -1,5 +1,6 @@
 #pragma once
 #include <muse/app/state.hpp>
+#include <muse/chain/protocol/ext.hpp>
 #include <muse/chain/protocol/types.hpp>
 
 #include <muse/chain/database.hpp>
@@ -188,7 +189,15 @@ class database_api
        * @ingroup db_api
        */
       asset_object get_asset( asset_id_type asset_id )const;
-      
+
+      /****************
+       * Get all holders of the given asset
+       * @param asset_id ID of the asset to look for
+       * @return a mapping of account ids and asset balances
+       * @ingroup db_api
+       */
+      map<account_id_type, share_type> get_asset_holders( asset_id_type asset_id )const;
+
       /****************
        * Get User Issued Asset balances for a particular account
        * @param account Account to look for
@@ -308,7 +317,6 @@ class database_api
        */
       dynamic_global_property_object get_dynamic_global_properties()const;
       chain_properties               get_chain_properties()const;
-      price                          get_current_median_history_price()const;
       feed_history_object            get_feed_history()const;
       witness_schedule_object        get_witness_schedule()const;
       hardfork_version               get_hardfork_version()const;
@@ -423,18 +431,26 @@ class database_api
       ////////////
 
       /**
-       * @breif Gets the current order book for ASSET:SBD market
+       * @breif Gets the current order book for MUSE:MBD market
        * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
        * @return Order book
        */
       order_book get_order_book( uint32_t limit = 1000 )const;
       /**
-       * Gets the current order book for the given asset market
+       * Gets the current order book for the given asset:MBD market
        * @param asset_id Asset ID to look for
        * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
        * @return Order book
        */
       order_book get_order_book_for_asset( asset_id_type asset_id,  uint32_t limit = 1000 )const;
+      /**
+       * Gets the current order book for the given market pair
+       * @param base_id first Asset ID to look for
+       * @param quote_id second asset ID to look for
+       * @param limit Maximum number of orders for each side of the spread to return -- Must not exceed 1000
+       * @return Order book
+       */
+      order_book get_order_book_for_assets( asset_id_type base_id, asset_id_type quote_id, uint32_t limit = 1000 )const;
       /**
        * Get open orders by the given account
        * @param owner Account opening the orders
@@ -530,7 +546,7 @@ class database_api
 } }
 
 FC_REFLECT( muse::app::order, (order_price)(real_price)(base)(quote)(created) );
-FC_REFLECT( muse::app::order_book, (asks)(bids) );
+FC_REFLECT( muse::app::order_book, (base)(quote)(asks)(bids) );
 FC_REFLECT( muse::app::scheduled_hardfork, (hf_version)(live_time) );
 FC_REFLECT( muse::app::liquidity_balance, (account)(weight) );
 
@@ -557,7 +573,6 @@ FC_API(muse::app::database_api,
    (get_dynamic_global_properties)
    (get_chain_properties)
    (get_feed_history)
-   (get_current_median_history_price)
    (get_witness_schedule)
    (get_hardfork_version)
    (get_next_scheduled_hardfork)
@@ -580,6 +595,7 @@ FC_API(muse::app::database_api,
    // Market
    (get_order_book)
    (get_order_book_for_asset)
+   (get_order_book_for_assets)
    (get_open_orders)
    (get_liquidity_queue)
 
@@ -610,6 +626,7 @@ FC_API(muse::app::database_api,
    (lookup_uias)
    (get_uia_details)
    (get_asset)
+   (get_asset_holders)
    (get_uia_balances)
    //score
    (get_account_scoring)

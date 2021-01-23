@@ -44,6 +44,12 @@ namespace impl {
          template<typename T>
          void operator()( const T& v )const { /* do nothing by default */ }
 
+         void operator()( const muse::chain::convert_operation& o )const {
+            if( o.amount.asset_id == MUSE_SYMBOL )
+               FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_6 ),
+                          "XSD -> xUSD conversion only allowed after hardfork 6!" );
+         }
+
          void operator()( const muse::chain::witness_update_operation& o )const {
             if( _db.has_hardfork( MUSE_HARDFORK_0_4 ) ) // TODO: move to validate after HF
                FC_ASSERT( o.url.size() <= MUSE_MAX_WITNESS_URL_LENGTH );
@@ -91,6 +97,22 @@ namespace impl {
 
          void operator()( const muse::chain::delegate_vesting_shares_operation& v )const {
             FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_4 ), "Vesting delegation is only allowed after hardfork 0.4" );
+         }
+
+         void operator()( const muse::chain::request_stream_reporting_operation& rsr )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet" );
+         }
+
+         void operator()( const muse::chain::cancel_stream_reporting_operation& rsr )const {
+            FC_ASSERT( _db.has_hardfork( MUSE_HARDFORK_0_5 ), "Not allowed yet" );
+         }
+
+         void operator()( const muse::chain::streaming_platform_report_operation& o )const {
+            if( !_db.has_hardfork( MUSE_HARDFORK_0_5 ) )
+            {
+               FC_ASSERT( !o.ext.value.spinning_platform.valid(), "Not allowed yet" );
+               FC_ASSERT( is_valid_account_name(o.consumer), "Invalid consumer" );
+            }
          }
 
          void operator()( const muse::chain::proposal_create_operation& v )const {

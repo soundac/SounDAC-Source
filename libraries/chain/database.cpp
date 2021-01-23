@@ -568,7 +568,8 @@ void database::update_account_market_bandwidth( const account_object& a, uint32_
 asset database::get_effective_vesting_shares( const account_object& account, asset_id_type vested_symbol )const
 {
    if( vested_symbol == VESTS_SYMBOL )
-      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares;
+      return account.vesting_shares - account.delegated_vesting_shares + account.received_vesting_shares
+             - account.redelegated_vesting_shares + account.rereceived_vesting_shares;
    FC_ASSERT( false, "Invalid symbol" );
 }
 
@@ -778,6 +779,30 @@ signed_block database::generate_block(
    return result;
 }
 
+class soft_fork_checker {
+public:
+   using result_type = void;
+
+   template<typename Op>
+   void operator()( const Op& op )const {}
+
+   void operator()( const muse::chain::proposal_create_operation& v )const {
+      for( const op_wrapper &op : v.proposed_ops )
+         op.op.visit( *this );
+   }
+
+   void operator()( const asset_create_operation& op )const {
+      FC_ASSERT( "federation" == op.issuer || "federation.asset" == op.issuer,
+                 "Only 'federation' and 'federation.asset' accounts can create assets!" );
+   }
+};
+
+static void check_soft_fork( const transaction& tx ) {
+   static soft_fork_checker vtor;
+
+   for( const auto& op : tx.operations )
+      op.visit( vtor );
+}
 
 signed_block database::_generate_block(
    fc::time_point_sec when,
@@ -859,6 +884,8 @@ signed_block database::_generate_block(
 
       try
       {
+         if( !has_hardfork( MUSE_HARDFORK_0_6 ) ) check_soft_fork( tx );
+
          auto temp_session = _undo_db.start_undo_session();
          _apply_transaction( tx );
          temp_session.merge();
@@ -1015,7 +1042,7 @@ asset database::create_mbd(const account_object &to_account, asset muse)
       if( muse.amount == 0 )
          return asset(0, MBD_SYMBOL);
 
-      const auto& median_price = get_feed_history().current_median_history;
+      const auto& median_price = get_feed_history().actual_median_history;
       if( !median_price.is_null() )
       {
          auto mbd = muse * median_price;
@@ -1064,10 +1091,13 @@ asset database::create_vesting( const account_object& to_account, asset muse )
          to.vesting_shares += new_vesting;
       } );
 
-      modify( cprops, [&]( dynamic_global_property_object& props )
+      const streaming_platform_object* sp = find_streaming_platform( to_account.name );
+      modify( cprops, [muse,new_vesting,sp]( dynamic_global_property_object& props )
       {
          props.total_vesting_fund_muse += muse;
          props.total_vesting_shares += new_vesting;
+         if( sp )
+             props.total_vested_by_platforms += new_vesting.amount;
       } );
 
       adjust_proxied_witness_votes( to_account, new_vesting.amount );
@@ -1632,6 +1662,178 @@ void database::process_vesting_withdrawals()
    }
 }
 
+struct sp_helper
+{
+   const streaming_platform_object* sp;
+   const account_object* sp_acct;
+   flat_map<account_id_type, uint32_t> account_listening_times;
+   flat_map<uint64_t, uint32_t> user_listening_times;
+   uint64_t anon_listening_time = 0;
+
+   share_type get_vesting_stake()const
+   {
+      return sp_acct->vesting_shares.amount
+             + sp_acct->received_vesting_shares.amount - sp_acct->delegated_vesting_shares.amount;
+   }
+};
+
+static asset calculate_report_reward( const database& db, const dynamic_global_property_object& dgpo,
+                                      const asset& total_payout, const uint32_t play_time,
+                                      const sp_helper& platform, const uint64_t total_listening_time )
+{
+   share_type stake = platform.get_vesting_stake();
+   if( stake.value == 0 || total_payout.amount.value == 0 )
+      return asset( 0, total_payout.asset_id );
+   FC_ASSERT( total_payout.amount.value > 0 );
+
+   dlog("process content cashout ", ("total_listening_time", total_listening_time));
+
+   fc::uint128_t pay_reserve = total_payout.amount.value;
+   pay_reserve *= play_time;
+   if( !db.has_hardfork( MUSE_HARDFORK_0_2 ) )
+      pay_reserve = pay_reserve / dgpo.active_users;
+   else if( !db.has_hardfork( MUSE_HARDFORK_0_5 ) )
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint64_t(3600) ) / dgpo.full_users_time;
+   else
+   {
+      pay_reserve = pay_reserve * stake.value / dgpo.total_vested_by_platforms.value;
+      pay_reserve = pay_reserve * std::min( total_listening_time, uint64_t(3600) )
+                                / platform.sp->full_users_time;
+   }
+   pay_reserve = pay_reserve / total_listening_time;
+
+   return asset( pay_reserve.to_uint64(), total_payout.asset_id );
+}
+
+template<typename K>
+static void adjust_listening_times( flat_map<K, uint32_t>& listening_times, K consumer, uint32_t play_time )
+{
+   auto listened = listening_times.find( consumer );
+   if( listened == listening_times.end() )
+      listening_times[consumer] = play_time;
+   else
+      listened->second += play_time;
+};
+
+static void adjust_delta( const uint32_t time_before, const uint32_t time_after,
+                          uint32_t& active_users, uint32_t& full_time_users,
+                          uint32_t& total_listening_time, uint32_t& full_users_time )
+{
+   total_listening_time += time_before - time_after;
+   if( time_after < 3600 )
+   {
+      if( time_after == 0 )
+         ++active_users;
+      if( time_before >= 3600 )
+      {
+         ++full_time_users;
+         full_users_time += 3600 - time_after;
+      }
+      else
+         full_users_time += time_before - time_after;
+   }
+}
+
+static void adjust_statistics( database& db, const dynamic_global_property_object& dgpo,
+                               const flat_map<streaming_platform_id_type, sp_helper> platforms )
+{
+   const bool adjust_consumer_total = db.has_hardfork( MUSE_HARDFORK_0_2 );
+
+   const auto& sp_user_idx = db.get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
+   uint32_t global_active_users_delta = 0;
+   uint32_t global_full_time_users_delta = 0;
+   uint32_t global_total_listening_time_delta = 0;
+   uint32_t global_full_users_time_delta = 0;
+   for( const auto& sph : platforms )
+   {
+      uint32_t platform_active_users_delta = 0;
+      uint32_t platform_full_time_users_delta = 0;
+      uint32_t platform_total_listening_time_delta = 0;
+      uint32_t platform_full_users_time_delta = 0;
+      // count normal users
+      for ( const auto& listened : sph.second.account_listening_times )
+      {
+         const account_object& consumer = db.get<account_object>( listened.first );
+         auto global_time_before = consumer.total_listening_time;
+         if( !adjust_consumer_total ) global_time_before += listened.second;
+         auto ptb = consumer.total_time_by_platform.find( sph.first );
+         FC_ASSERT( ptb != consumer.total_time_by_platform.end() );
+         const uint32_t platform_time_before = ptb->second;
+         db.modify( consumer, [&listened,adjust_consumer_total,&sph] ( account_object& a ) {
+            if( adjust_consumer_total )
+               a.total_listening_time -= listened.second;
+            auto entry = a.total_time_by_platform.find( sph.first );
+            FC_ASSERT( entry != a.total_time_by_platform.end() );
+            entry->second -= listened.second;
+            if( entry->second == 0 )
+               a.total_time_by_platform.erase( sph.first );
+         });
+
+         adjust_delta( global_time_before, consumer.total_listening_time,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         ptb = consumer.total_time_by_platform.find( sph.first );
+         adjust_delta( platform_time_before, ptb == consumer.total_time_by_platform.end() ? 0 : ptb->second,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
+      // count pseudonymous users
+      for ( const auto& listened : sph.second.user_listening_times )
+      {
+         const auto& itr = sp_user_idx.find( boost::make_tuple( sph.first, listened.first ) );
+         const streaming_platform_user_object& consumer = *itr;
+         auto global_time_before = consumer.total_listening_time;
+         if( consumer.total_listening_time == listened.second )
+            db.remove( consumer );
+         else
+            db.modify( consumer, [&listened,adjust_consumer_total,&sph] ( streaming_platform_user_object& a ) {
+               a.total_listening_time -= listened.second;
+            });
+
+         adjust_delta( global_time_before, global_time_before - listened.second,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         adjust_delta( global_time_before, global_time_before - listened.second,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
+      // count anon user
+      if( sph.second.anon_listening_time > 0 )
+      {
+         adjust_delta( sph.second.sp->total_anon_listening_time,
+                       sph.second.sp->total_anon_listening_time - sph.second.anon_listening_time,
+                       global_active_users_delta, global_full_time_users_delta,
+                       global_total_listening_time_delta, global_full_users_time_delta );
+         adjust_delta( sph.second.sp->total_anon_listening_time,
+                       sph.second.sp->total_anon_listening_time - sph.second.anon_listening_time,
+                       platform_active_users_delta, platform_full_time_users_delta,
+                       platform_total_listening_time_delta, platform_full_users_time_delta );
+      }
+      if( platform_total_listening_time_delta > 0 || platform_full_users_time_delta > 0
+            || platform_full_time_users_delta > 0 || platform_active_users_delta > 0 )
+         db.modify( *sph.second.sp, [platform_total_listening_time_delta,platform_full_users_time_delta,
+                                     platform_full_time_users_delta,platform_active_users_delta,&sph]
+                                    ( streaming_platform_object& o ) {
+            o.active_users -= platform_active_users_delta;
+            o.full_time_users -= platform_full_time_users_delta;
+            o.total_listening_time -= platform_total_listening_time_delta;
+            o.full_users_time -= platform_full_users_time_delta;
+            o.total_anon_listening_time -= sph.second.anon_listening_time;
+         });
+   } // for platforms
+
+   if( global_total_listening_time_delta > 0 || global_full_users_time_delta > 0
+         || global_full_time_users_delta > 0 || global_active_users_delta > 0 )
+      db.modify( dgpo, [global_total_listening_time_delta,global_full_users_time_delta,
+                        global_full_time_users_delta,global_active_users_delta]
+                       ( dynamic_global_property_object& o ) {
+         o.active_users -= global_active_users_delta;
+         o.full_time_users -= global_full_time_users_delta;
+         o.total_listening_time -= global_total_listening_time_delta;
+         o.full_users_time -= global_full_users_time_delta;
+      });
+}
+
 asset database::process_content_cashout( const asset& content_reward )
 { try {
    auto now = head_block_time();
@@ -1640,55 +1842,95 @@ asset database::process_content_cashout( const asset& content_reward )
    
    asset total_payout = has_hardfork( MUSE_HARDFORK_0_2 ) ? content_reward : get_content_reward();
 
+   const auto& sp_user_idx = get_index_type< streaming_platform_user_index >().indices().get< by_consumer >();
    const auto& ridx = get_index_type<report_index>().indices().get<by_created>();
+   const auto& dgpo = get_dynamic_global_properties();
    auto itr = ridx.begin();
-   std::set<account_id_type> customers;
-   uint64_t full_time = 0;
-   while ( itr != ridx.end() && itr->created <= now )  // FIXME: doesn't scale
-   {
-      if( customers.insert(itr->consumer).second )
-      {
-          const auto& user = get<account_object>( itr->consumer );
-          full_time += std::min( user.total_listening_time, uint32_t(3600) );
-      }
-      ++itr;
-   }
-   flat_map<account_id_type, uint32_t> listening_times;
-   itr = ridx.begin();
+   flat_map<streaming_platform_id_type, sp_helper> platforms;
    while ( itr != ridx.end() && itr->created <= cashing_time )
    {
-      const account_object & consumer = get<account_object>( itr->consumer );
-      dlog("process content cashout ", ("consumer.total_listening_time", consumer.total_listening_time));
-      FC_ASSERT( consumer.total_listening_time > 0 );
-      asset pay_reserve = total_payout * itr->play_time;
-      if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
-         pay_reserve = pay_reserve / customers.size();
+      const streaming_platform_id_type spinner_id = itr->spinning_platform.valid()
+                                                         ? *itr->spinning_platform : itr->streaming_platform;
+      auto sp = platforms.find( spinner_id );
+      if( sp == platforms.end() )
+      {
+         sp_helper tmp;
+         tmp.sp = &get<streaming_platform_object>( spinner_id );
+         tmp.sp_acct = &get_account( tmp.sp->owner );
+         platforms[spinner_id] = std::move( tmp );
+         sp = platforms.find( spinner_id );
+      }
+
+      const account_object* consumer_account = nullptr;
+      const streaming_platform_user_object* consumer_sp_user = nullptr;
+      uint64_t total_listening_time = 0;
+      if( itr->consumer.valid() )
+      {
+         consumer_account = &get<account_object>( *itr->consumer );
+         if( !has_hardfork( MUSE_HARDFORK_0_5 ) )
+            total_listening_time = consumer_account->total_listening_time;
+         else
+         {
+            auto time_entry = consumer_account->total_time_by_platform.find( spinner_id );
+            FC_ASSERT( time_entry != consumer_account->total_time_by_platform.end() );
+            total_listening_time = time_entry->second;
+         }
+      }
+      else if( itr->sp_user_id.valid() )
+      {
+         const auto& spu = sp_user_idx.find( boost::make_tuple( spinner_id, *itr->sp_user_id ) );
+         if( spu != sp_user_idx.end() ) // should always be true
+         {
+            consumer_sp_user = &(*spu);
+            total_listening_time = consumer_sp_user->total_listening_time;
+         }
+      }
       else
-         pay_reserve = pay_reserve * std::min( consumer.total_listening_time, uint32_t(3600) ) / full_time;
-      pay_reserve = pay_reserve / consumer.total_listening_time;
-      paid += pay_to_content(itr->content, pay_reserve, itr->streaming_platform );
-      auto listened = listening_times.find(consumer.id);
-      if( listened == listening_times.end() )
-         listening_times[consumer.id] = itr->play_time;
+         total_listening_time = sp->second.sp->total_anon_listening_time;
+      auto report_reward = calculate_report_reward( *this, dgpo, total_payout, itr->play_time, sp->second,
+                                                    total_listening_time );
+      const content_object& content = get<content_object>( itr->content );
+      auto content_payment = pay_to_content( content, report_reward, itr->streaming_platform );
+      paid += content_payment;
+      if( has_hardfork( MUSE_HARDFORK_0_5 ) )
+      {
+         auto platform_reward = report_reward - content_payment;
+         asset reporter_reward;
+         if( itr->spinning_platform.valid() && itr->reward_pct.valid() )
+         {
+            reporter_reward = asset( platform_reward.amount * *itr->reward_pct / MUSE_100_PERCENT,
+                                   platform_reward.asset_id );
+            if( platform_reward.amount > reporter_reward.amount )
+               pay_to_platform( *itr->spinning_platform, platform_reward - reporter_reward, content.url );
+         }
+         else
+            reporter_reward = platform_reward;
+
+         if( reporter_reward.amount > 0 )
+            pay_to_platform( itr->streaming_platform, reporter_reward, content.url );
+
+         paid += platform_reward;
+      }
+      else // before hf_0_5 platform_reward is paid out in pay_to_content()
+         if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
+            modify( *consumer_account, [&itr]( account_object& a ) {
+               a.total_listening_time -= itr->play_time;
+            });
+
+      if( consumer_account != nullptr )
+         adjust_listening_times( sp->second.account_listening_times, account_id_type(consumer_account->id),
+                                 itr->play_time );
+      else if( consumer_sp_user != nullptr )
+         adjust_listening_times( sp->second.user_listening_times, consumer_sp_user->sp_user_id, itr->play_time );
       else
-         listened->second += itr->play_time;
-      if( !has_hardfork( MUSE_HARDFORK_0_2 ) )
-         modify<account_object>(consumer, [&itr](account_object & a){
-            a.total_listening_time -= itr->play_time;
-         });
+         sp->second.anon_listening_time += itr->play_time;
+
       remove(*itr);
       itr = ridx.begin();
    }
-   if( has_hardfork( MUSE_HARDFORK_0_2 ) )
-   {
-      for ( const auto& listened : listening_times )
-      {
-         const account_object& consumer = get<account_object>( listened.first );
-         modify<account_object>(consumer, [&listened](account_object & a){
-            a.total_listening_time -= listened.second;
-         });
-      }
-   }
+
+   adjust_statistics( *this, dgpo, platforms );
+
    return paid;
 } FC_LOG_AND_RETHROW() }
 
@@ -1797,28 +2039,30 @@ void database::pay_to_platform( streaming_platform_id_type platform, const asset
    push_applied_operation(playing_reward_operation(pl.owner, url, mbd_created, vest_created ));
 }FC_LOG_AND_RETHROW() }
 
-asset database::pay_to_content(content_id_type content, asset payout, streaming_platform_id_type platform)
+asset database::pay_to_content(const content_object& content, asset payout, streaming_platform_id_type platform)
 {try{
    asset paid (0);
    if( !has_hardfork(MUSE_HARDFORK_0_2) )
       payout = payout - payout * MUSE_CURATE_APR_PERCENT_RESERVE / 100; // former curation reward
-   const content_object& co = get<content_object>( content );
    asset platform_reward = payout;
-   platform_reward.amount = platform_reward.amount * co.playing_reward / 10000;
+   platform_reward.amount = platform_reward.amount * content.playing_reward / MUSE_100_PERCENT;
 
    payout.amount -= platform_reward.amount;
    asset comp_reward = payout;
-   comp_reward.amount = comp_reward.amount * co.publishers_share / 10000;
+   comp_reward.amount = comp_reward.amount * content.publishers_share / MUSE_100_PERCENT;
    asset master_reward = payout - comp_reward;
 
-   pay_to_content_master(co, master_reward);
-   pay_to_content_comp(co, comp_reward);
-   pay_to_platform( platform, platform_reward, co.url );
+   pay_to_content_master(content, master_reward);
    paid += master_reward;
+   pay_to_content_comp(content, comp_reward);
    paid += comp_reward;
-   paid += platform_reward;
+   if( !has_hardfork(MUSE_HARDFORK_0_5) )
+   {
+      pay_to_platform( platform, platform_reward, content.url );
+      paid += platform_reward;
+   }
 
-   modify<content_object>( co, []( content_object& c ) {
+   modify<content_object>( content, []( content_object& c ) {
       --c.times_played_24;
    });
 
@@ -1922,7 +2166,7 @@ void database::process_conversions()
    auto itr = request_by_date.begin();
 
    const auto& fhistory = get_feed_history();
-   if( fhistory.current_median_history.is_null() )
+   if( fhistory.effective_median_history.is_null() )
       return;
 
    asset net_mbd( 0, MBD_SYMBOL );
@@ -1931,7 +2175,7 @@ void database::process_conversions()
    while( itr != request_by_date.end() && itr->conversion_date <= now )
    {
       const auto& user = get_account( itr->owner );
-      auto amount_to_issue = itr->amount * fhistory.current_median_history;
+      auto amount_to_issue = itr->amount * fhistory.effective_median_history;
 
       adjust_balance( user, amount_to_issue );
 
@@ -1950,7 +2194,7 @@ void database::process_conversions()
        p.current_supply += net_muse;
        p.current_mbd_supply -= net_mbd;
        p.virtual_supply += net_muse;
-       p.virtual_supply -= net_mbd * get_feed_history().current_median_history;
+       p.virtual_supply -= net_mbd * get_feed_history().effective_median_history;
    } );
 }
 
@@ -1958,20 +2202,20 @@ asset database::to_mbd( const asset& muse )const
 {
    FC_ASSERT( muse.asset_id == MUSE_SYMBOL );
    const auto& feed_history = get_feed_history();
-   if( feed_history.current_median_history.is_null() )
+   if( feed_history.actual_median_history.is_null() )
       return asset( 0, MBD_SYMBOL );
 
-   return muse * feed_history.current_median_history;
+   return muse * feed_history.actual_median_history;
 }
 
 asset database::to_muse(const asset &mbd)const
 {
    FC_ASSERT( mbd.asset_id == MBD_SYMBOL );
    const auto& feed_history = get_feed_history();
-   if( feed_history.current_median_history.is_null() )
+   if( feed_history.effective_median_history.is_null() )
       return asset( 0, MUSE_SYMBOL );
 
-   return mbd * feed_history.current_median_history;
+   return mbd * feed_history.effective_median_history;
 }
 
 void database::account_recovery_processing()
@@ -2061,6 +2305,8 @@ void database::initialize_evaluators()
     register_evaluator<account_update_evaluator>();
     register_evaluator<witness_update_evaluator>();
     register_evaluator<streaming_platform_update_evaluator>();
+    register_evaluator<request_stream_reporting_evaluator>();
+    register_evaluator<cancel_stream_reporting_evaluator>();
     register_evaluator<account_witness_vote_evaluator>();
     register_evaluator<account_streaming_platform_vote_evaluator>();
     register_evaluator<account_witness_proxy_evaluator>();
@@ -2114,9 +2360,11 @@ void database::initialize_indexes()
    acnt_index->add_secondary_index<account_member_index>();
 
    add_index< primary_index< streaming_platform_index > >();
+   add_index< primary_index< stream_report_request_index > >();
    add_index< primary_index< report_index > >();
    add_index< primary_index< witness_index > >();
    add_index< primary_index< streaming_platform_vote_index > >();
+   add_index< primary_index< streaming_platform_user_index > >();
    add_index< primary_index< witness_vote_index > >();
    add_index< primary_index< convert_index > >();
    add_index< primary_index< liquidity_reward_index > >();
@@ -2443,6 +2691,8 @@ void database::_apply_block( const signed_block& next_block )
    FC_ASSERT( get_witness( next_block.witness ).running_version >= hardfork_property_id_type()( *this ).current_hardfork_version,
          "Block produced by witness that is not running current hardfork" );
 
+   bool soft_fork = !has_hardfork( MUSE_HARDFORK_0_6 )
+                    && next_block.timestamp >= fc::time_point::now() - fc::seconds(30);
    for( const auto& trx : next_block.transactions )
    {
       /* We do not need to push the undo state for each transaction
@@ -2451,6 +2701,7 @@ void database::_apply_block( const signed_block& next_block )
        * for transactions when validating broadcast transactions or
        * when building a block.
        */
+      if( soft_fork ) check_soft_fork( trx );
       apply_transaction( trx, skip );
       ++_current_trx_in_block;
    }
@@ -2568,15 +2819,38 @@ try {
       auto median_feed = feeds[feeds.size()/2];
 
       modify( get_feed_history(), [&]( feed_history_object& fho ){
-           fho.price_history.push_back( median_feed );
-           if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
-               fho.price_history.pop_front();
+         fho.price_history.push_back( median_feed );
+         if( fho.price_history.size() > MUSE_FEED_HISTORY_WINDOW )
+             fho.price_history.pop_front();
 
-           if( fho.price_history.size() ) {
-              std::deque<price> copy = fho.price_history;
-              std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
-              fho.current_median_history = copy[copy.size()/2];
-           }
+         if( fho.price_history.size() ) {
+            std::deque<price> copy = fho.price_history;
+            std::sort( copy.begin(), copy.end() ); /// todo: use nth_item
+            fho.effective_median_history = fho.actual_median_history = copy[copy.size()/2];
+
+            if( has_hardfork( MUSE_HARDFORK_0_6 ) )
+            {
+               // This block limits the effective median price to force MBD to remain at or
+               // below 5% of the combined market cap of MUSE and MBD.
+               //
+               // For example, if we have 500 MUSE and 100 MBD, the price is limited to
+               // 1900 MBD / 500 MUSE which works out to be $3.80.  At this price, 500 MUSE
+               // would be valued at 500 * $3.80 = $1900.  100 MBD is by definition always $100,
+               // so the combined market cap is $1900 + $100 = $2000.
+
+               const auto& gpo = get_dynamic_global_properties();
+
+               if( gpo.current_mbd_supply.amount > 0 )
+               {
+		  if( fho.effective_median_history.base.asset_id != MBD_SYMBOL )
+		     fho.effective_median_history = ~fho.effective_median_history;
+                  price max_price( asset( 19 * gpo.current_mbd_supply.amount, MBD_SYMBOL ), gpo.current_supply );
+
+                  if( max_price > fho.effective_median_history )
+                     fho.effective_median_history = max_price;
+               }
+            }
+         }
       });
    }
 } FC_CAPTURE_AND_RETHROW() }
@@ -2814,7 +3088,8 @@ void database::update_virtual_supply()
    modify( get_dynamic_global_properties(), [&]( dynamic_global_property_object& dgp )
    {
       dgp.virtual_supply = dgp.current_supply
-         + ( get_feed_history().current_median_history.is_null() ? asset( 0, MUSE_SYMBOL ) : dgp.current_mbd_supply * get_feed_history().current_median_history );
+         + ( get_feed_history().effective_median_history.is_null() ? asset( 0, MUSE_SYMBOL )
+                : dgp.current_mbd_supply * get_feed_history().effective_median_history );
    });
 }
 
@@ -3064,11 +3339,17 @@ void database::clear_expired_orders()
 
 void database::clear_expired_delegations()
 {
-   auto now = head_block_time();
+   const auto dgpo = get_dynamic_global_properties();
+   auto now = dgpo.time;
    const auto& delegations_by_exp = get_index_type< vesting_delegation_expiration_index >().indices().get< by_expiration >();
    auto itr = delegations_by_exp.begin();
    while( itr != delegations_by_exp.end() && itr->expiration < now )
    {
+      if( find_streaming_platform( itr->delegator ) )
+         modify( dgpo, [&itr]( dynamic_global_property_object& dgpo ) {
+            dgpo.total_vested_by_platforms += itr->vesting_shares.amount;
+         });
+
       modify( get_account( itr->delegator ), [&]( account_object& a )
       {
          a.delegated_vesting_shares -= itr->vesting_shares;
@@ -3137,7 +3418,7 @@ void database::adjust_balance( const account_object& a, const asset& delta )
                   modify( get_dynamic_global_properties(), [&]( dynamic_global_property_object& props)
                   {
                      props.current_mbd_supply += interest_paid;
-                     props.virtual_supply += interest_paid * get_feed_history().current_median_history;
+                     props.virtual_supply += interest_paid * get_feed_history().effective_median_history;
                   } );
                }
             }
@@ -3188,13 +3469,19 @@ void database::adjust_supply( const asset& delta, bool adjust_vesting )
          assert( props.current_supply.amount.value >= 0 );
       }else if (delta.asset_id == MBD_SYMBOL){
          props.current_mbd_supply += delta;
-         props.virtual_supply = props.current_mbd_supply * get_feed_history().current_median_history + props.current_supply;
+         props.virtual_supply = props.current_mbd_supply * get_feed_history().effective_median_history + props.current_supply;
          assert( props.current_mbd_supply.amount.value >= 0 );
       }else
          FC_ASSERT( !"invalid symbol" );
    } );
 }
 
+const asset_object& database::get_asset(const std::string& symbol)const {
+   auto& index = get_index_type<asset_index>().indices().get<by_symbol>();
+   auto itr = index.find(symbol);
+   FC_ASSERT(itr != index.end(), "Asset '${s}' not found", ("s",symbol));
+   return *itr;
+}
 
 asset database::get_balance( const account_object& a, asset_id_type symbol )const
 {
@@ -3225,9 +3512,16 @@ void database::init_hardforks()
    FC_ASSERT( MUSE_HARDFORK_0_4 == 4, "Invalid hardfork configuration" );
    _hardfork_times[ MUSE_HARDFORK_0_4 ] = fc::time_point_sec( MUSE_HARDFORK_0_4_TIME );
    _hardfork_versions[ MUSE_HARDFORK_0_4 ] = MUSE_HARDFORK_0_4_VERSION;
+   FC_ASSERT( MUSE_HARDFORK_0_5 == 5, "Invalid hardfork configuration" );
+   _hardfork_times[ MUSE_HARDFORK_0_5 ] = fc::time_point_sec( MUSE_HARDFORK_0_5_TIME );
+   _hardfork_versions[ MUSE_HARDFORK_0_5 ] = MUSE_HARDFORK_0_5_VERSION;
+   FC_ASSERT( MUSE_HARDFORK_0_6 == 6, "Invalid hardfork configuration" );
+   _hardfork_times[ MUSE_HARDFORK_0_6 ] = fc::time_point_sec( MUSE_HARDFORK_0_6_TIME );
+   _hardfork_versions[ MUSE_HARDFORK_0_6 ] = MUSE_HARDFORK_0_6_VERSION;
 
    const auto& hardforks = hardfork_property_id_type()( *this );
-   FC_ASSERT( hardforks.last_hardfork <= MUSE_NUM_HARDFORKS, "Chain knows of more hardforks than configuration", ("hardforks.last_hardfork",hardforks.last_hardfork)("MUSE_NUM_HARDFORKS",MUSE_NUM_HARDFORKS) );
+   FC_ASSERT( hardforks.last_hardfork <= MUSE_NUM_HARDFORKS, "Chain knows of more hardforks than configuration",
+              ("hardforks.last_hardfork",hardforks.last_hardfork)("MUSE_NUM_HARDFORKS",MUSE_NUM_HARDFORKS) );
    FC_ASSERT( _hardfork_versions[ hardforks.last_hardfork ] <= MUSE_BLOCKCHAIN_VERSION, "Blockchain version is older than last applied hardfork" );
 }
 
@@ -3378,6 +3672,7 @@ void database::validate_invariants()const
       for( auto itr = witness_idx.begin(); itr != witness_idx.end(); ++itr )
          FC_ASSERT( itr->votes < gpo.total_vesting_shares.amount, "", ("itr",*itr) );
 
+      share_type total_vested_by_sp = 0;
       for( auto itr = account_idx.begin(); itr != account_idx.end(); ++itr )
       {
          total_supply += itr->balance;
@@ -3388,6 +3683,9 @@ void database::validate_invariants()const
                                  ( MUSE_MAX_PROXY_RECURSION_DEPTH > 0 ?
                                       itr->proxied_vsf_votes[MUSE_MAX_PROXY_RECURSION_DEPTH - 1] :
                                       itr->vesting_shares.amount ) );
+         if( find_streaming_platform( itr->name ) != nullptr )
+            total_vested_by_sp += itr->vesting_shares.amount - itr->delegated_vesting_shares.amount
+                                  + itr->received_vesting_shares.amount;
       }
 
       const auto& convert_request_idx = get_index_type< convert_index >().indices();
@@ -3433,12 +3731,17 @@ void database::validate_invariants()const
       FC_ASSERT( gpo.current_mbd_supply == total_mbd, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)("total_mbd",total_mbd) );
       FC_ASSERT( gpo.total_vesting_shares == total_vesting, "", ("gpo.total_vesting_shares",gpo.total_vesting_shares)("total_vesting",total_vesting) );
       FC_ASSERT( gpo.total_vesting_shares.amount == total_vsf_votes, "", ("total_vesting_shares",gpo.total_vesting_shares)("total_vsf_votes",total_vsf_votes) );
+      FC_ASSERT( gpo.total_vested_by_platforms == total_vested_by_sp, "",
+                 ("total_vested_by_platforms",gpo.total_vested_by_platforms)
+                 ("total_vested_by_sp",total_vested_by_sp) );
 
       FC_ASSERT( gpo.virtual_supply >= gpo.current_supply );
-      if ( !get_feed_history().current_median_history.is_null() )
+      if ( !get_feed_history().effective_median_history.is_null() )
       {
-         FC_ASSERT( gpo.current_mbd_supply * get_feed_history().current_median_history + gpo.current_supply
-            == gpo.virtual_supply, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)("get_feed_history().current_median_history",get_feed_history().current_median_history)("gpo.current_supply",gpo.current_supply)("gpo.virtual_supply",gpo.virtual_supply) );
+         FC_ASSERT( gpo.current_mbd_supply * get_feed_history().effective_median_history + gpo.current_supply
+            == gpo.virtual_supply, "", ("gpo.current_mbd_supply",gpo.current_mbd_supply)
+                 ("get_feed_history().effective_median_history",get_feed_history().effective_median_history)
+                 ("gpo.current_supply",gpo.current_supply)("gpo.virtual_supply",gpo.virtual_supply) );
       }
    }
    FC_CAPTURE_LOG_AND_RETHROW( (head_block_num()) );
