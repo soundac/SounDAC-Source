@@ -1140,7 +1140,7 @@ public:
       auto issuer = get_account_from_id(asset_obj->issuer);
       asset_issue_operation issue_op;
       issue_op.issuer = issuer->name;
-      issue_op.asset_to_issue = asset::from_string( amount + std::string(" ") + std::string(asset_obj->id) );
+      issue_op.asset_to_issue = asset_obj->amount_from_string( amount );
       issue_op.issue_to_account = to_account;
 
       signed_transaction tx;
@@ -1160,7 +1160,7 @@ public:
       
       asset_reserve_operation reserve_op;
       reserve_op.issuer = issuer->name;
-      reserve_op.amount_to_reserve = asset::from_string( amount + std::string(" ") + std::string(asset_obj->id) );
+      reserve_op.amount_to_reserve = asset_obj->amount_from_string( amount );
       reserve_op.payer = from_account;
 
       signed_transaction tx;
