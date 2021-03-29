@@ -60,8 +60,12 @@ RUN \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         . && \
-    make mused cli_wallet get_dev_key && \
-    install -s programs/mused/mused programs/cli_wallet/cli_wallet programs/util/get_dev_key /usr/local/bin && \
+    make mused cli_wallet get_dev_key map_muse_network && \
+    install -s programs/mused/mused \
+		programs/cli_wallet/cli_wallet \
+		programs/util/get_dev_key \
+		programs/util/map_muse_network \
+		/usr/local/bin && \
     install -d /etc/SounDAC && \
     install -m 0644 Docker/config.ini /etc/SounDAC/ && \
     install -m 0755 Docker/entrypoint.sh / && \
@@ -95,3 +99,4 @@ COPY --from=build /etc/SounDAC/version /etc/SounDAC/version
 COPY --from=build /usr/local/bin/cli_wallet /usr/local/bin/cli_wallet
 COPY --from=build /usr/local/bin/get_dev_key /usr/local/bin/get_dev_key
 COPY --from=build /usr/local/bin/mused /usr/local/bin/mused
+COPY --from=build /usr/local/bin/map_muse_network /usr/local/bin/map_muse_network
